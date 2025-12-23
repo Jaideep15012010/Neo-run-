@@ -1,41 +1,98 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Galaxy Sky Shooter</title>
-    <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0f0; }
-        canvas { display: block; touch-action: none; }
-        #ui { position: absolute; top: 10px; left: 10px; pointer-events: none; font-size: 20px; z-index: 5; }
-        #start { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: #fff; font-size: 25px; text-align: center; z-index: 10; cursor: pointer; }
-    </style>
+    <title>Galaxy Shooter</title>
 </head>
-<body>
+<body style="margin:0; background:#000; overflow:hidden;">
 
-<div id="ui">LEVEL: <span id="l">1</span> | SCORE: <span id="s">0</span></div>
-<div id="start" onclick="play()">🚀 GALAXY SKY 🚀<br><br>TAP TO START GAME</div>
+<div style="position:absolute; top:10; left:10; color:#0f0; font-family:sans-serif; pointer-events:none;">
+    LEVEL: <span id="l">1</span> | SCORE: <span id="s">0</span>
+</div>
 
 <canvas id="g"></canvas>
 
 <script>
-    const canvas = document.getElementById('g');
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    
-    let score=0, level=1, active=false;
-    let player={x:canvas.width/2, y:canvas.height-100};
-    let stars=[], enemies=[], bullets=[];
+    const c = document.getElementById('g');
+    const x = c.getContext('2d');
+    c.width = window.innerWidth;
+    c.height = window.innerHeight;
 
-    for(let i=0; i<80; i++) stars.push({x:Math.random()*canvas.width, y:Math.random()*canvas.height, s:Math.random()*2+1});
+    let score=0, level=1, player={x:c.width/2, y:c.height-100}, stars=[], enemies=[], bullets=[];
 
-    function play() {
-        document.getElementById('start').style.display = 'none';
-        active = true;
-        animate();
+    // Stars background
+    for(let i=0; i<50; i++) stars.push({x:Math.random()*c.width, y:Math.random()*c.height, s:Math.random()*2+1});
+
+    // Control
+    window.addEventListener('touchmove', e => {
+        player.x = e.touches[0].clientX;
+        player.y = e.touches[0].clientY - 50;
+    });
+
+    function spawn() {
+        enemies.push({x:Math.random()*c.width, y:-50, s:3+level, hp:level});
+    }
+    setInterval(spawn, 1000);
+
+    function draw() {
+        x.fillStyle='black';
+        x.fillRect(0,0,c.width,c.height);
+
+        // Stars
+        x.fillStyle='white';
+        stars.forEach(st => {
+            st.y += st.s + level;
+            if(st.y > c.height) st.y = 0;
+            x.fillRect(st.x, st.y, 2, 2);
+        });
+
+        // Player (Spaceship)
+        x.fillStyle='#0ff';
+        x.beginPath();
+        x.moveTo(player.x, player.y-30);
+        x.lineTo(player.x-25, player.y+20);
+        x.lineTo(player.x+25, player.y+20);
+        x.fill();
+
+        // Bullets
+        if(Math.random()>0.9) bullets.push({x:player.x, y:player.y-30});
+        bullets.forEach((b,i) => {
+            b.y -= 10;
+            x.fillStyle='yellow';
+            x.fillRect(b.x-2, b.y, 4, 12);
+            if(b.y < 0) bullets.splice(i,1);
+        });
+
+        // Enemies
+        enemies.forEach((en,i) => {
+            en.y += en.s;
+            x.fillStyle='red';
+            x.fillRect(en.x-20, en.y-20, 40, 40);
+
+            bullets.forEach((b,bi) => {
+                if(Math.abs(b.x-en.x)<30 && Math.abs(b.y-en.y)<30){
+                    en.hp--;
+                    bullets.splice(bi,1);
+                    if(en.hp<=0){
+                        enemies.splice(i,1);
+                        score+=10;
+                        if(score%100==0) level++;
+                    }
+                }
+            });
+
+            if(en.y > c.height || (Math.abs(en.x-player.x)<35 && Math.abs(en.y-player.y)<35)){
+                alert("GAME OVER! Score: " + score);
+                location.reload();
+            }
+        });
+
+        document.getElementById('s').innerText = score;
+        document.getElementById('l').innerText = level;
+        requestAnimationFrame(draw);
     }
 
-    window.addEventListener('touchmove', e => { 
-        if(!active) return;
-        player.x = e.touches[0].clientX; 
-        player.
-            
+    draw(); // Game starts automatically
+</script>
+</body>
+</html>
+
