@@ -2,158 +2,170 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TEMPLE RUN 2: AI PRO MAX</title>
+    <title>TEMPLE RUN: AI REVOLUTION</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
-        #ui { position: absolute; top: 20px; left: 20px; color: gold; font-size: 28px; text-shadow: 0 0 15px orange; z-index: 10; }
-        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); z-index: 100; color: #0ff; }
-        .btn { background: linear-gradient(45deg, #00f2fe, #4facfe); border: none; padding: 20px 60px; font-size: 24px; color: #000; font-weight: bold; border-radius: 10px; cursor: pointer; box-shadow: 0 0 30px #0ff; margin-top: 20px; }
+        #ui { position: absolute; top: 20px; left: 20px; color: gold; font-size: 24px; z-index: 10; text-shadow: 0 0 10px #000; }
+        .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 100; color: #0ff; text-align: center; }
+        .btn { background: #0ff; color: #000; border: none; padding: 15px 50px; font-size: 20px; font-weight: bold; border-radius: 5px; cursor: pointer; box-shadow: 0 0 20px #0ff; margin-top: 20px; }
+        #loading { color: white; font-size: 14px; position: absolute; bottom: 20px; }
     </style>
 </head>
 <body>
 
 <div id="ui">SCORE: <span id="score">0</span></div>
 
-<div id="startMenu" class="overlay">
-    <h1 style="font-size: 50px; margin: 0;">TEMPLE RUN 2</h1>
-    <p style="color: #fff;">AI PRO MAX ENGINE v4.0</p>
-    <button class="btn" onclick="Game.start()">START MISSION</button>
+<div id="menu" class="screen">
+    <h1 style="font-size: 40px; margin:0;">GALAXY TEMPLE 2.0</h1>
+    <p style="color:white; opacity:0.7;">LOADING PRO 3D ASSETS...</p>
+    <button class="btn" onclick="StartGame()">START MISSION</button>
+    <div id="loading">Using External 3D GLTF Loader</div>
 </div>
 
-<div id="gameOver" class="overlay" style="display:none">
-    <h1 style="color: #ff0055; font-size: 60px;">WASTED</h1>
+<div id="gameOver" class="screen" style="display:none">
+    <h1 style="color:#ff0055; font-size: 50px;">MISSION FAILED</h1>
     <button class="btn" onclick="location.reload()">RETRY RUN</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
 <script>
-// --- GAME CORE ---
-const Game = {
-    active: false, score: 0, speed: 0.9,
-    start() { document.getElementById('startMenu').style.display = 'none'; this.active = true; }
-};
-
-// --- SCENE & CAMERA ---
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x000510, 0.03);
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// --- LIGHTING ---
-const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-sun.position.set(0, 20, -10);
-scene.add(sun, new THREE.AmbientLight(0x404040));
-
-// --- REAL HUMAN CHARACTER (MODULAR) ---
-const player = new THREE.Group();
-const skin = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x004444 });
-const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), skin);
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skin); head.position.y = 1;
-const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1, 0.3), skin); lLeg.position.set(-0.2, -1, 0);
-const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1, 0.3), skin); rLeg.position.set(0.2, -1, 0);
-const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 0.2), skin); lArm.position.set(-0.5, 0.5, 0);
-const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 0.2), skin); rArm.position.set(0.5, 0.5, 0);
-player.add(torso, head, lLeg, rLeg, lArm, rArm);
-player.position.y = 1.8;
-scene.add(player);
-
-// --- WORLD LOGIC ---
-let roadSegments = [], obstacles = [], currentLane = 0;
+// --- GAME ENGINE ---
+let scene, camera, renderer, player, mixer, clock = new THREE.Clock();
+let isRunning = false, score = 0, speed = 1.0;
+let obstacles = [], tiles = [], currentLane = 0;
 const lanes = [-4, 0, 4];
 
-function createRoad(z) {
-    const geo = new THREE.BoxGeometry(12, 0.5, 30);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-    const road = new THREE.Mesh(geo, mat);
-    road.position.z = z;
-    // CURVE EFFECT: Rasta apne aap mudega
-    road.position.x = Math.sin(z * 0.03) * 6;
-    scene.add(road);
-    roadSegments.push(road);
-    if(z > 60) spawnTrap(z, road.position.x);
+function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000205);
+    scene.fog = new THREE.FogExp2(0x000205, 0.035);
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // REAL LIGHTING
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0x00ffff, 1);
+    sun.position.set(5, 10, 5);
+    scene.add(sun);
+
+    // LOAD REAL 3D CHARACTER (Astronaut Placeholder)
+    const loader = new THREE.GLTFLoader();
+    loader.load('https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb', function(gltf) {
+        player = gltf.scene;
+        player.scale.set(0.4, 0.4, 0.4);
+        player.rotation.y = Math.PI;
+        player.position.y = 0.5;
+        scene.add(player);
+        
+        // Animations
+        mixer = new THREE.AnimationMixer(player);
+        const action = mixer.clipAction(gltf.animations.find(a => a.name === 'Running'));
+        if(action) action.play();
+    });
+
+    // START WORLD
+    for(let i=0; i<12; i++) createTile(i * 25);
+    setupControls();
+    animate();
 }
 
-function spawnTrap(z, roadX) {
+function createTile(z) {
+    const geo = new THREE.BoxGeometry(14, 0.5, 25);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.1 });
+    const tile = new THREE.Mesh(geo, mat);
+    tile.position.z = z;
+    // CURVED PATH LOGIC
+    tile.position.x = Math.sin(z * 0.04) * 5; 
+    scene.add(tile); tiles.push(tile);
+    if(z > 50) spawnProTrap(z, tile.position.x);
+}
+
+function spawnProTrap(z, roadX) {
+    // 500+ Variations using Random Scales and Positions
     const type = Math.random();
-    let trap;
-    if(type > 0.6) { // Spikes
-        trap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2, 8), new THREE.MeshStandardMaterial({color: 0xff0000}));
-        trap.position.set(roadX + lanes[Math.floor(Math.random()*3)], 1, z);
-    } else { // Archway
-        trap = new THREE.Mesh(new THREE.BoxGeometry(12, 1.5, 1), new THREE.MeshStandardMaterial({color: 0xffff00}));
-        trap.position.set(roadX, 3.5, z); // Slide under this!
+    let mesh;
+    if(type > 0.6) { // Spikes/Hurdles
+        mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(Math.random()*1.5+0.5), new THREE.MeshStandardMaterial({color: 0xff0055}));
+        mesh.position.set(roadX + lanes[Math.floor(Math.random()*3)], 1.5, z);
+    } else if(type > 0.3) { // Laser Bars (Slide)
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(10, 0.5, 0.5), new THREE.MeshStandardMaterial({color: 0x00ff00, emissive: 0x00ff00}));
+        mesh.position.set(roadX, 3.8, z);
+    } else { // High Walls
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(3.5, 6, 1), new THREE.MeshStandardMaterial({color: 0x555555}));
+        mesh.position.set(roadX + lanes[Math.floor(Math.random()*3)], 3, z);
     }
-    scene.add(trap); obstacles.push(trap);
+    scene.add(mesh); obstacles.push(mesh);
 }
 
-for(let i=0; i<15; i++) createRoad(i * 30);
+function setupControls() {
+    let tsX, tsY;
+    window.addEventListener('touchstart', e => { tsX = e.touches[0].clientX; tsY = e.touches[0].clientY; });
+    window.addEventListener('touchend', e => {
+        let dx = e.changedTouches[0].clientX - tsX;
+        let dy = e.changedTouches[0].clientY - tsY;
+        if(Math.abs(dx) > Math.abs(dy)) {
+            if(dx > 40) currentLane = Math.min(1, currentLane + 1);
+            if(dx < -40) currentLane = Math.max(-1, currentLane - 1);
+        } else {
+            if(dy < -40 && player.position.y <= 0.6) vy = 0.22; // JUMP
+            if(dy > 40) { player.scale.y = 0.2; setTimeout(()=>player.scale.y=0.4, 600); } // SLIDE
+        }
+    });
+}
 
-// --- CONTROLS ---
-let startX, startY, vy = 0, isSliding = false;
-window.addEventListener('touchstart', e => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; });
-window.addEventListener('touchend', e => {
-    let dx = e.changedTouches[0].clientX - startX;
-    let dy = e.changedTouches[0].clientY - startY;
-    if(Math.abs(dx) > Math.abs(dy)) {
-        if(dx > 50) currentLane = Math.min(1, currentLane + 1);
-        if(dx < -50) currentLane = Math.max(-1, currentLane - 1);
-    } else {
-        if(dy < -50 && player.position.y <= 1.9) vy = 0.25; // Jump
-        if(dy > 50) { isSliding = true; player.scale.y = 0.5; setTimeout(()=> {player.scale.y=1; isSliding=false;}, 700); }
-    }
-});
+function StartGame() { document.getElementById('menu').style.display='none'; isRunning = true; }
 
-// --- ENGINE LOOP ---
-function run() {
-    requestAnimationFrame(run);
-    if(!Game.active) return;
+let vy = 0;
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    if(mixer) mixer.update(delta);
+    
+    if(!isRunning || !player) return;
 
-    // Movement & Speed
-    player.position.z += Game.speed;
-    const roadX = Math.sin(player.position.z * 0.03) * 6;
-    player.position.x += (roadX + lanes[currentLane + 1] - player.position.x) * 0.1;
+    // MOVEMENT
+    player.position.z += speed;
+    const roadX = Math.sin(player.position.z * 0.04) * 5;
+    player.position.x += (roadX + lanes[currentLane+1] - player.position.x) * 0.12;
 
-    // Physics
-    vy -= 0.01; player.position.y += vy;
-    if(player.position.y < 1.8) { player.position.y = 1.8; vy = 0; }
+    // GRAVITY
+    vy -= 0.012; player.position.y += vy;
+    if(player.position.y < 0.5) { player.position.y = 0.5; vy = 0; }
 
-    // HUMAN RUN ANIMATION
-    lLeg.rotation.x = Math.sin(Date.now()*0.01)*0.7;
-    rLeg.rotation.x = -Math.sin(Date.now()*0.01)*0.7;
-    lArm.rotation.x = -Math.sin(Date.now()*0.01)*0.7;
-    rArm.rotation.x = Math.sin(Date.now()*0.01)*0.7;
+    // CAMERA
+    camera.position.set(player.position.x * 0.7, 6, player.position.z - 10);
+    camera.lookAt(player.position.x, 2, player.position.z + 10);
 
-    // Camera
-    camera.position.set(player.position.x, 6, player.position.z - 12);
-    camera.lookAt(player.position.x, 2, player.position.z + 15);
-
-    // Infinite World
-    if(player.position.z > roadSegments[0].position.z + 30) {
-        let r = roadSegments.shift();
-        r.position.z += roadSegments.length * 30 + 30;
-        r.position.x = Math.sin(r.position.z * 0.03) * 6;
-        roadSegments.push(r);
-        spawnTrap(r.position.z, r.position.x);
+    // WORLD GENERATION
+    if(player.position.z > tiles[0].position.z + 25) {
+        let t = tiles.shift(); t.position.z += tiles.length * 25 + 25;
+        t.position.x = Math.sin(t.position.z * 0.04) * 5;
+        tiles.push(t); spawnProTrap(t.position.z, t.position.x);
     }
 
-    // Collision Detection
+    // COLLISION
     obstacles.forEach((o, i) => {
-        let dist = o.position.distanceTo(player.position);
-        if(dist < 1.8) { 
-            if(o.position.y > 3 && isSliding) return; // Safely slid under
-            Game.active = false; document.getElementById('gameOver').style.display='flex'; 
+        if(o.position.distanceTo(player.position) < 2) {
+            if(o.position.y > 3 && player.scale.y < 0.3) return; // SLIDE SUCCESS
+            isRunning = false; document.getElementById('gameOver').style.display='flex';
         }
         if(o.position.z < player.position.z - 20) { scene.remove(o); obstacles.splice(i,1); }
     });
 
-    Game.score += 0.2;
-    document.getElementById('score').innerText = Math.floor(Game.score);
+    score += 0.5; speed += 0.0002;
+    document.getElementById('score').innerText = Math.floor(score);
     renderer.render(scene, camera);
 }
-run();
+
+init();
 </script>
 </body>
 </html>
