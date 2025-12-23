@@ -281,4 +281,29 @@ renderer.setClearColor(0x1a1a2e);
 
 initMonster(); 
 // --- END OF MEGA UPDATE ---
+  // --- FINAL MEGA UPDATE: PARTS 20-25 (FIRE, BOOST & FINISH) ---
+
+// 1. Fire Traps (Part 20) - Raste par aag ke gole
+function spawnFire(zPos) {
+    if (Math.random() > 0.9) { 
+        const fireGeo = new THREE.SphereGeometry(1.2, 8, 8);
+        const fireMat = new THREE.MeshStandardMaterial({ 
+            color: 0xff4400, 
+            emissive: 0xff0000, 
+            emissiveIntensity: 2 
+        });
+        const fire = new THREE.Mesh(fireGeo, fireMat);
+        fire.position.set(LANES[Math.floor(Math.random()*3)], 0.5, zPos);
+        fire.userData = { type: 'fire' };
+        scene.add(fire);
+        obstacles.push(fire); // Aag se takraye toh game over
+    }
+}
+
+// 2. Speed Boost (Part 21) - Blue Arrows jo speed badhayenge
+function spawnBoost(zPos) {
+    if (Math.random() > 0.95) {
+        const boostGeo = new THREE.ConeGeometry(0.5, 1, 4);
+        const boostMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff });
+        const boost = new THREE.Mesh(
             
