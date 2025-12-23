@@ -433,4 +433,121 @@ function updatePhysics() {
 
 // --- END OF PART 10 ---
 
+// --- PART 11: COINS & GEMS (Paste after Part 10 inside <script>) ---
+
+function spawnItems(zPos) {
+    // 50% chance ki coin ya gem dikhe
+    if (Math.random() > 0.5) {
+        const type = Math.random() > 0.85 ? 'gem' : 'coin'; // 15% chance Gem ka
+        
+        // Coin/Gem ki shakal (Geometry)
+        const itemGeo = type === 'gem' ? new THREE.OctahedronGeometry(0.6) : new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16);
+        const itemMat = new THREE.MeshStandardMaterial({ 
+            color: type === 'gem' ? 0xd000ff : 0xffff00,
+            metalness: 0.8,
+            roughness: 0.2
+        });
+        
+        const item = new THREE.Mesh(itemGeo, itemMat);
+        
+        // Gem/Coin ko lanes mein set karna
+        const xPos = LANES[Math.floor(Math.random() * 3)];
+        item.position.set(xPos, 1.5, zPos);
+        
+        if (type === 'coin') item.rotation.x = Math.PI / 2;
+        
+        item.userData = { type: type }; // Pehchan ke liye
+        scene.add(item);
+        items.push(item);
+    }
+}
+
+function checkItemCollections() {
+    items.forEach((item, index) => {
+        // Item ko gol ghumana (Animation)
+        item.rotation.y += 0.05;
+
+        // Player ne item uthaya ya nahi?
+        if (player && player.position.distanceTo(item.position) < 2) {
+            if (item.userData.type === 'coin') {
+                db.coins = (db.coins || 0) + 1;
+                score += 50; // Coin se score badhega
+            } else {
+                sessionGems += 1;
+                db.gems += 1;
+                score += 500; // Gem se score zyada badhega
+            }
+            
+            // HUD update karna
+            document.getElementById('current-gems').innerText = sessionGems;
+            
+            // Item gayab karna
+            scene.remove(item);
+            items.splice(index, 1);
+            saveDB();
+        }
+
+        // Peeche chhoote items ko delete karna
+        if (item.position.z < player.position.z - 20) {
+            scene.remove(item);
+            items.splice(index, 1);
+        }
+    });
+}
+
+// Ab is function ko bhi updatePhysics (Part 10) mein jodh do
+// updatePhysics ke andar checkItemCollections(); likhna hoga.
+
+// --- END OF PART 11 ---
+
+// --- PART 12: THE BRIDGE (Paste after Part 11 inside <script>) ---
+
+// Ye function humne Part 3 mein khali chhoda tha, ab ise poora karte hain
+function startGame() {
+    // 1. UI chhupao aur Game HUD dikhao
+    document.getElementById('home-page').style.display = 'none';
+    document.getElementById('game-hud').style.display = 'flex';
+    document.getElementById('loading-screen').style.display = 'none';
+    
+    // 2. Game ko active karo
+    gameActive = true;
+    
+    // 3. Score aur Gems reset karo is session ke liye
+    score = 0;
+    sessionGems = 0;
+    speed = 1.0;
+    
+    console.log("Mission Started!");
+}
+
+// Ek chota sa fix physics loop ke liye (Jo Part 11 mein reh gaya tha)
+function updatePhysics() {
+    if (!gameActive) return;
+    updatePlayerLane();       // Part 9
+    checkCollisions();        // Part 10
+    checkItemCollections();   // Part 11
+}
+
+// --- END OF PART 12 ---
+
+// --- PART 13: MAP SWITCHER (Paste after Part 12 inside <script>) ---
+
+function updateEnvironment() {
+    if (score > 2000 && db.unlockedMaps.includes('Desert')) {
+        // Desert Theme
+        scene.background = new THREE.Color(0xeedc82);
+        scene.fog.color.set(0xeedc82);
+    } else if (score > 4000) {
+        // Cyber/Night Theme
+        scene.background = new THREE.Color(0x000033);
+        scene.fog.color.set(0x000033);
+    }
+}
+
+// Ise handleMovement (Part 7) ke andar score badhne ke baad call karenge
+// --- END OF PART 13 ---
+
+
+
+    
 
