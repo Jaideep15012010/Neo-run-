@@ -1,13 +1,12 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Galaxy Overlord: Ultra HD</title>
+    <title>Galaxy Overlord: 3D Edition</title>
 </head>
-<body style="margin:0; background:#000510; overflow:hidden; font-family:'Segoe UI', sans-serif;">
+<body style="margin:0; background:#000814; overflow:hidden; font-family:'Orbitron', sans-serif;">
 
-<div style="position:absolute; top:10; left:10; color:#0ff; font-weight:bold; pointer-events:none; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:10px; border:1px solid #0ff;">
-    LEVEL: <span id="lvl">1</span> | COINS: <span id="scr">0</span><br>
-    GEMS: <span id="gms">0</span> | BEST: <span id="best">0</span>
+<div style="position:absolute; top:10; left:10; color:#0ff; font-weight:bold; pointer-events:none; z-index:100; text-shadow:0 0 10px #0ff;">
+    LEVEL: <span id="lvl">1</span> | COINS: <span id="scr">0</span> | GEMS: <span id="gms">0</span>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -21,134 +20,120 @@
     let score = parseInt(localStorage.getItem('galaxyScore')) || 0;
     let level = parseInt(localStorage.getItem('galaxyLevel')) || 1;
     let gems = parseInt(localStorage.getItem('galaxyGems')) || 0;
-    let bestScore = localStorage.getItem('galaxyBest') || 0;
-    let active = true;
+    let active = true, fireRate = 0;
 
-    document.getElementById('scr').innerText = score;
-    document.getElementById('lvl').innerText = level;
-    document.getElementById('gms').innerText = gems;
-    document.getElementById('best').innerText = bestScore;
+    let player = { x: canvas.width/2, y: canvas.height-100, pwr: 0 };
+    let bullets = [], enemyBullets = [], enemies = [], stars = [], powers = [];
 
-    let player = { x: canvas.width/2, y: canvas.height-100, hue: 180 };
-    let bullets = [], enemyBullets = [], enemies = [], stars = [], particles = [];
-
-    // Background Stars
-    for(let i=0; i<100; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*4+1});
+    // Starfield Generation
+    for(let i=0; i<120; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*3+0.5, o: Math.random()});
 
     window.addEventListener('touchmove', e => {
         player.x = e.touches[0].clientX;
         player.y = e.touches[0].clientY - 50;
     });
 
-    function createExplosion(x, y, color) {
-        for(let i=0; i<10; i++) particles.push({x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:20, color});
-    }
-
     function spawnEnemy() {
         if(!active) return;
-        let type = Math.random();
-        let eType = "ship";
-        if(level > 2 && type > 0.7) eType = "ufo";
-        if(level > 4 && type > 0.9) eType = "bomber";
-
+        let isElite = (level % 4 === 0);
         enemies.push({ 
-            x: Math.random()*(canvas.width-50)+25, 
-            y: -50, 
-            type: eType,
-            hp: eType === "bomber" ? 3 : 1,
-            speed: eType === "ufo" ? 4 : 2 + (level * 0.3),
-            w: eType === "bomber" ? 60 : 40,
-            angle: 0
+            x: Math.random()*(canvas.width-60)+30, 
+            y: -60, 
+            type: isElite ? "elite" : "normal",
+            hp: isElite ? 5 : 1,
+            speed: isElite ? 1.5 : 2 + (level * 0.3),
+            w: isElite ? 70 : 45,
+            sinDir: Math.random() * Math.PI
         });
     }
-    setInterval(spawnEnemy, 1200 / (1 + level*0.05));
+    setInterval(spawnEnemy, 1300 / (1 + level*0.08));
 
-    function drawPlayer(xPos, yPos) {
+    function draw3DShip(x, y, color, size, isPlayer) {
         ctx.save();
-        ctx.shadowBlur = 20; ctx.shadowColor = `hsl(${player.hue}, 100%, 50%)`;
-        ctx.fillStyle = `hsl(${player.hue}, 100%, 50%)`;
-        // Ship Body (Advanced Design)
+        ctx.shadowBlur = 15; ctx.shadowColor = color;
+        
+        // Main Body Gradient for 3D effect
+        let grad = ctx.createLinearGradient(x-size, y, x+size, y);
+        grad.addColorStop(0, '#333');
+        grad.addColorStop(0.5, color);
+        grad.addColorStop(1, '#333');
+        
+        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.moveTo(xPos, yPos - 35);
-        ctx.lineTo(xPos - 25, yPos + 15);
-        ctx.lineTo(xPos, yPos + 5);
-        ctx.lineTo(xPos + 25, yPos + 15);
-        ctx.closePath();
-        ctx.fill();
-        // Thruster Fire
-        ctx.fillStyle = "orange";
-        ctx.fillRect(xPos - 5, yPos + 15, 10, 10 + Math.random()*10);
-        ctx.restore();
-    }
-
-    function drawEnemy(en) {
-        ctx.save();
-        ctx.shadowBlur = 10; ctx.shadowColor = "red";
-        if(en.type === "ufo") {
-            ctx.fillStyle = "#ff00ff";
-            ctx.beginPath(); ctx.ellipse(en.x, en.y, 25, 15, 0, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "#0ff"; ctx.beginPath(); ctx.arc(en.x, en.y-5, 10, 0, Math.PI*2); ctx.fill();
-        } else if(en.type === "bomber") {
-            ctx.fillStyle = "#ff4400";
-            ctx.fillRect(en.x-30, en.y-20, 60, 40);
-            ctx.fillStyle = "red"; ctx.fillRect(en.x-10, en.y+10, 20, 10);
+        if(isPlayer) {
+            ctx.moveTo(x, y-size); ctx.lineTo(x-size, y+size); ctx.lineTo(x, y+size/2); ctx.lineTo(x+size, y+size);
         } else {
-            ctx.fillStyle = "#ff0000";
-            ctx.beginPath(); ctx.moveTo(en.x, en.y+30); ctx.lineTo(en.x-20, en.y-10); ctx.lineTo(en.x+20, en.y-10); ctx.fill();
+            ctx.moveTo(x, y+size); ctx.lineTo(x-size, y-size/2); ctx.lineTo(x, y-size); ctx.lineTo(x+size, y-size/2);
         }
+        ctx.closePath(); ctx.fill();
+
+        // Cockpit Glow
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.beginPath();
+        ctx.arc(x, isPlayer ? y : y-5, size/4, 0, Math.PI*2);
+        ctx.fill();
         ctx.restore();
     }
 
     function gameLoop() {
         if(!active) return;
-        ctx.fillStyle = 'rgba(0, 5, 16, 0.4)'; // Motion blur effect
-        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = 'rgba(0, 4, 12, 0.5)'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
-        stars.forEach(st => { st.y += st.s; if(st.y > canvas.height) st.y = 0; ctx.fillStyle = 'white'; ctx.fillRect(st.x, st.y, 2, 2); });
+        stars.forEach(st => { 
+            st.y += st.s; if(st.y > canvas.height) st.y = 0; 
+            ctx.fillStyle = `rgba(255,255,255,${st.o})`; ctx.fillRect(st.x, st.y, 2, 2); 
+        });
 
-        drawPlayer(player.x, player.y);
+        draw3DShip(player.x, player.y, '#00e5ff', 30, true);
 
-        // Bullets
-        if(Math.random() > 0.85) bullets.push({x: player.x, y: player.y - 30});
+        // Auto Fire
+        let rateLimit = player.pwr > 0 ? 5 : 12;
+        if(fireRate++ % rateLimit === 0) bullets.push({x: player.x, y: player.y - 30});
+        if(player.pwr > 0) player.pwr--;
+
         bullets.forEach((b, i) => {
-            b.y -= 15; ctx.fillStyle = '#ff0'; ctx.shadowBlur = 10; ctx.shadowColor = 'yellow';
-            ctx.fillRect(b.x-2, b.y, 4, 15);
+            b.y -= 18; ctx.fillStyle = '#fff'; ctx.shadowBlur = 10; ctx.shadowColor = '#0ff';
+            ctx.fillRect(b.x-2, b.y, 4, 18);
             if(b.y < 0) bullets.splice(i, 1);
         });
 
-        // Particles
-        particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life--;
-            ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3);
-            if(p.life <= 0) particles.splice(i, 1);
+        // Power-ups
+        powers.forEach((p, i) => {
+            p.y += 3; ctx.fillStyle = '#f0f'; ctx.font = 'bold 20px Arial'; ctx.fillText('P', p.x, p.y);
+            if(Math.abs(p.x - player.x) < 40 && Math.abs(p.y - player.y) < 40) { player.pwr = 300; powers.splice(i,1); }
         });
 
         // Enemies
         enemies.forEach((en, i) => {
-            if(en.type === "ufo") en.x += Math.sin(Date.now()/200)*5;
             en.y += en.speed;
-            drawEnemy(en);
+            if(en.type === "elite") en.x += Math.sin(en.sinDir += 0.05) * 4;
+            draw3DShip(en.x, en.y, en.type === "elite" ? "#ff0055" : "#ff4400", en.w/2, false);
 
-            if(Math.random() > 0.98) enemyBullets.push({x: en.x, y: en.y + 20});
+            // Crazy Shooting for Elites
+            if(en.type === "elite" && Math.random() > 0.95) {
+                enemyBullets.push({x: en.x, y: en.y, vx: Math.sin(Date.now())*3, vy: 5});
+            } else if(Math.random() > 0.99) {
+                enemyBullets.push({x: en.x, y: en.y, vx: 0, vy: 7});
+            }
 
             bullets.forEach((b, bi) => {
-                if(Math.abs(b.x - en.x) < en.w/2 && Math.abs(b.y - en.y) < 25) {
+                if(Math.abs(b.x - en.x) < en.w/2 && Math.abs(b.y - en.y) < 30) {
                     en.hp--; bullets.splice(bi, 1);
                     if(en.hp <= 0) {
-                        createExplosion(en.x, en.y, "orange");
+                        if(en.type === "elite") powers.push({x: en.x, y: en.y});
                         enemies.splice(i, 1); score += 10;
-                        if(Math.random() > 0.8) { gems++; localStorage.setItem('galaxyGems', gems); }
-                        localStorage.setItem('galaxyScore', score);
                         if(score % 100 === 0) { level++; localStorage.setItem('galaxyLevel', level); }
+                        localStorage.setItem('galaxyScore', score);
                     }
                 }
             });
 
-            if(en.y > canvas.height || (Math.abs(en.x - player.x) < 40 && Math.abs(en.y - player.y) < 40)) gameOver();
+            if(en.y > canvas.height || (Math.abs(en.x - player.x) < 35 && Math.abs(en.y - player.y) < 35)) gameOver();
         });
 
         enemyBullets.forEach((eb, i) => {
-            eb.y += 8; ctx.fillStyle = '#f00'; ctx.fillRect(eb.x-2, eb.y, 5, 12);
+            eb.y += eb.vy; eb.x += eb.vx;
+            ctx.fillStyle = '#ff3300'; ctx.beginPath(); ctx.arc(eb.x, eb.y, 4, 0, Math.PI*2); ctx.fill();
             if(Math.abs(eb.x - player.x) < 25 && Math.abs(eb.y - player.y) < 25) gameOver();
             if(eb.y > canvas.height) enemyBullets.splice(i, 1);
         });
@@ -160,14 +145,12 @@
     }
 
     function gameOver() {
-        active = false;
-        if(score > bestScore) localStorage.setItem('galaxyBest', score);
-        alert("GAME OVER! Saved progress.");
-        location.reload();
+        active = false; alert("MISSION FAILED! Score: " + score); location.reload();
     }
 
     gameLoop();
 </script>
 </body>
 </html>
+
 
