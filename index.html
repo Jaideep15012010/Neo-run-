@@ -184,4 +184,101 @@ loop();
 </script>
 </body>
 </html>
+// --- MEGA UPDATE: PARTS 14-19 START ---
 
+let isMagnetActive = false;
+let monster;
+let magnetTimer = 0;
+
+// Monster ko game mein shamil karna
+function initMonster() {
+    const mGeo = new THREE.BoxGeometry(2.5, 5, 2);
+    const mMat = new THREE.MeshStandardMaterial({ 
+        color: 0x660000, 
+        emissive: 0xff0000, 
+        emissiveIntensity: 0.5 
+    });
+    monster = new THREE.Mesh(mGeo, mMat);
+    scene.add(monster);
+}
+
+// Magnet Power-up banane wala function
+function spawnPowerUp(zPos) {
+    if (Math.random() > 0.85) { 
+        const magGeo = new THREE.TorusGeometry(0.5, 0.2, 8, 16);
+        const magMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 1 });
+        const magnet = new THREE.Mesh(magGeo, magMat);
+        magnet.position.set(LANES[Math.floor(Math.random()*3)], 1.8, zPos);
+        magnet.userData = { type: 'magnet' };
+        scene.add(magnet);
+        items.push(magnet);
+    }
+}
+
+// PURANE UPDATEGAME KO YE NAYA WALA REPLACE KAREGA
+function updateGame() {
+    if(!gameActive || !player) return;
+
+    // 1. Movement & Score
+    player.position.z += speed;
+    score++; 
+    document.getElementById('current-score').innerText = score;
+    player.position.x += (LANES[currentLane+1] - player.position.x) * 0.15;
+
+    // 2. Monster Follow (Temple Run feel)
+    if(monster) {
+        monster.position.x += (player.position.x - monster.position.x) * 0.05;
+        monster.position.z = player.position.z - 10; 
+    }
+
+    // 3. Road Recycling & Spawning
+    if(player.position.z > tiles[0].position.z + 30) {
+        let t = tiles.shift(); 
+        t.position.z += tiles.length * 30 + 30;
+        tiles.push(t);
+        spawnObstacle(t.position.z); 
+        spawnItems(t.position.z);
+        spawnPowerUp(t.position.z); 
+    }
+
+    // 4. Magnet & Coins Logic
+    items.forEach((item, i) => {
+        if (isMagnetActive && item.userData.type === 'coin') {
+            item.position.lerp(player.position, 0.2);
+        }
+        if(player.position.distanceTo(item.position) < 2) {
+            if(item.userData.type === 'magnet') {
+                isMagnetActive = true;
+                magnetTimer = 500;
+            } else if(item.userData.type === 'gem') {
+                sessionGems++; db.gems++;
+            }
+            scene.remove(item);
+            items.splice(i, 1);
+            saveDB();
+            document.getElementById('current-gems').innerText = sessionGems;
+        }
+    });
+
+    if(isMagnetActive) {
+        magnetTimer--;
+        if(magnetTimer <= 0) isMagnetActive = false;
+    }
+
+    // 5. Collision Check (Marna)
+    obstacles.forEach(obs => {
+        if(player.position.distanceTo(obs.position) < 2.2) {
+            gameActive = false;
+            alert("GAME OVER! Monster Caught or Crashed!");
+            location.reload();
+        }
+    });
+}
+
+// Graphics ko dark aur cool banana
+scene.fog = new THREE.FogExp2(0x1a1a2e, 0.01);
+renderer.setClearColor(0x1a1a2e);
+
+initMonster(); 
+// --- END OF MEGA UPDATE ---
+            
