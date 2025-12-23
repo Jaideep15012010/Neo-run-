@@ -1,129 +1,242 @@
-<!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Galaxy Runner 3D Pro</title>
-<style>
-  body { margin: 0; overflow: hidden; background:#000; font-family: sans-serif; }
-  #ui { position: absolute; top: 10px; left: 10px; color: #0ff; font-weight: bold; font-size: 20px; text-shadow: 0 0 10px #0ff; }
-  #health { color: #ff0055; margin-left: 20px; }
-  canvas { display:block; }
-</style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GALAXY TEMPLE: INFINITY</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
+        #overlay { position: absolute; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); }
+        .stat-box { position: absolute; top: 20px; right: 20px; color: gold; text-align: right; pointer-events: none; z-index: 50; }
+        .joy-info { position: absolute; bottom: 80px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-size: 12px; }
+        button { background: linear-gradient(to bottom, #00f2fe, #4facfe); border: none; padding: 20px 60px; font-family: 'Orbitron'; font-size: 24px; border-radius: 10px; cursor: pointer; box-shadow: 0 10px 0 #0055aa; transition: 0.1s; }
+        button:active { transform: translateY(5px); box-shadow: 0 5px 0 #0055aa; }
+    </style>
 </head>
 <body>
-<div id="ui">SCORE: <span id="s">0</span> <span id="health">HP: 3</span></div>
-<script src="https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.min.js"></script>
+
+<div id="overlay">
+    <h1 style="color: #0ff; font-size: 40px; text-shadow: 0 0 20px #0ff;">GALAXY RUN 2</h1>
+    <p style="color: #fff; opacity: 0.7;">TEMPLE ENGINE v4.0.1</p>
+    <button onclick="Core.init()">PLAY MISSION</button>
+</div>
+
+<div class="stat-box">
+    SCORE: <span id="ui-score">0</span><br>
+    MULTIPLIER: x<span id="ui-mult">1</span>
+</div>
+
+<div class="joy-info">SWIPE: LEFT | RIGHT | JUMP | SLIDE</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+/**
+ * GALAXY TEMPLE ENGINE - MODULAR ARCHITECTURE
+ * Author: Gemini Gaming Framework
+ */
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000510);
-scene.fog = new THREE.FogExp2(0x000510, 0.02); // Add depth fog
+const Config = {
+    laneWidth: 4,
+    speed: 0.6,
+    jumpForce: 0.22,
+    gravity: 0.009,
+    chunkSize: 40,
+    maxChunks: 8
+};
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(0, 4, -8);
+const Core = {
+    active: false,
+    score: 0,
+    multiplier: 1,
+    
+    init() {
+        document.getElementById('overlay').style.display = 'none';
+        this.active = true;
+        World.setup();
+        Player.setup();
+        Controls.bind();
+        this.loop();
+    },
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// Lights
-const ambient = new THREE.AmbientLight(0x404040); scene.add(ambient);
-const light = new THREE.PointLight(0x00ffff, 2, 50); light.position.set(0, 10, 0); scene.add(light);
-
-// Player (Advanced Ship Shape)
-const playerGroup = new THREE.Group();
-const body = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2, 4), new THREE.MeshStandardMaterial({color: 0x00e5ff}));
-body.rotation.x = Math.PI/2;
-playerGroup.add(body);
-const wings = new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 0.5), new THREE.MeshStandardMaterial({color: 0x0088ff}));
-playerGroup.add(wings);
-playerGroup.position.set(0, 0.5, 0);
-scene.add(playerGroup);
-
-// Ground (Space Path)
-const groundGeo = new THREE.PlaneGeometry(12, 2000);
-const groundMat = new THREE.MeshStandardMaterial({color: 0x111122, side: THREE.DoubleSide});
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.rotation.x = Math.PI/2;
-ground.position.z = 1000;
-scene.add(ground);
-
-// Stars
-const starGeo = new THREE.BufferGeometry();
-const starCount = 2000;
-const posArray = new Float32Array(starCount * 3);
-for(let i=0; i<starCount*3; i++) posArray[i] = (Math.random()-0.5) * 200;
-starGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-const starMat = new THREE.PointsMaterial({size: 0.1, color: 0xffffff});
-const starField = new THREE.Points(starGeo, starMat);
-scene.add(starField);
-
-// Game State
-const lanes = [-3, 0, 3];
-let currentLane = 1, speed = 0.5, score = 0, health = 3;
-let obstacles = [], orbs = [];
-
-// SWIPE CONTROLS for Mobile
-let touchStartX = 0;
-document.addEventListener('touchstart', e => touchStartX = e.touches[0].clientX);
-document.addEventListener('touchend', e => {
-  let diff = e.changedTouches[0].clientX - touchStartX;
-  if (diff > 50) currentLane = Math.min(2, currentLane + 1);
-  if (diff < -50) currentLane = Math.max(0, currentLane - 1);
-});
-
-// PC Controls
-document.addEventListener('keydown', e => {
-  if(e.key==='ArrowLeft') currentLane = Math.max(0, currentLane-1);
-  if(e.key==='ArrowRight') currentLane = Math.min(2, currentLane+1);
-});
-
-function spawn() {
-  const lane = lanes[Math.floor(Math.random()*3)];
-  const z = camera.position.z + 100;
-  
-  // Spawn Obstacle
-  const obs = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), new THREE.MeshStandardMaterial({color:0xff3300}));
-  obs.position.set(lane, 0.8, z);
-  scene.add(obs); obstacles.push(obs);
-
-  // Spawn Orb
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({color:0x00ff00, emissive: 0x00ff00}));
-  orb.position.set(lanes[Math.floor(Math.random()*3)], 0.8, z + 10);
-  scene.add(orb); orbs.push(orb);
-}
-setInterval(spawn, 1000);
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  // Movement
-  playerGroup.position.x += (lanes[currentLane] - playerGroup.position.x) * 0.1;
-  camera.position.z += speed;
-  playerGroup.position.z = camera.position.z + 5;
-  starField.position.z = camera.position.z;
-
-  // Obstacle Collision
-  obstacles.forEach((o, i) => {
-    if(o.position.distanceTo(playerGroup.position) < 1.2) {
-      scene.remove(o); obstacles.splice(i, 1);
-      health--; document.getElementById('health').innerText = "HP: "+health;
-      if(health <= 0) { alert("Game Over! Score: " + score); location.reload(); }
+    loop() {
+        if(!Core.active) return;
+        requestAnimationFrame(() => Core.loop());
+        
+        Player.update();
+        World.update();
+        UI.refresh();
+        Renderer.render();
     }
-  });
+};
 
-  // Orb Collection
-  orbs.forEach((orb, i) => {
-    if(orb.position.distanceTo(playerGroup.position) < 1.2) {
-      scene.remove(orb); orbs.splice(i, 1);
-      score += 50; speed += 0.005;
-      document.getElementById('s').innerText = score;
+const Renderer = {
+    scene: new THREE.Scene(),
+    camera: new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000),
+    webGL: new THREE.WebGLRenderer({ antialias: true }),
+
+    setup() {
+        this.webGL.setSize(window.innerWidth, window.innerHeight);
+        this.webGL.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(this.webGL.domElement);
+        this.camera.position.set(0, 6, -10);
+        this.scene.fog = new THREE.FogExp2(0x000510, 0.03);
+        
+        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        sun.position.set(5, 20, 10);
+        this.scene.add(sun, new THREE.AmbientLight(0x404040, 0.6));
+    },
+
+    render() {
+        this.camera.lookAt(Player.mesh.position.x, Player.mesh.position.y + 2, Player.mesh.position.z + 10);
+        this.webGL.render(this.scene, this.camera);
     }
-  });
+};
 
-  renderer.render(scene, camera);
-}
-animate();
+const Player = {
+    mesh: null,
+    lane: 0,
+    vy: 0,
+    isGrounded: true,
+    state: 'run',
+
+    setup() {
+        const geo = new THREE.BoxGeometry(1.2, 1.8, 1.2);
+        const mat = new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.2 });
+        this.mesh = new THREE.Mesh(geo, mat);
+        this.mesh.position.y = 1;
+        Renderer.scene.add(this.mesh);
+    },
+
+    update() {
+        // Lane Movement
+        const targetX = this.lane * Config.laneWidth;
+        this.mesh.position.x += (targetX - this.mesh.position.x) * 0.15;
+        
+        // Forward Movement
+        this.mesh.position.z += Config.speed;
+        Renderer.camera.position.z += Config.speed;
+
+        // Jump & Gravity
+        this.vy -= Config.gravity;
+        this.mesh.position.y += this.vy;
+
+        if(this.mesh.position.y <= 1) {
+            this.mesh.position.y = 1;
+            this.vy = 0;
+            this.isGrounded = true;
+        }
+
+        // 3D Tilt Effect
+        this.mesh.rotation.z = (targetX - this.mesh.position.x) * 0.1;
+        this.mesh.rotation.x = Config.speed * 0.2;
+    }
+};
+
+const World = {
+    chunks: [],
+    obstacles: [],
+    coins: [],
+
+    setup() {
+        for(let i=0; i<Config.maxChunks; i++) {
+            this.spawnChunk(i * Config.chunkSize);
+        }
+    },
+
+    spawnChunk(z) {
+        const geo = new THREE.BoxGeometry(15, 1, Config.chunkSize);
+        const mat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+        const floor = new THREE.Mesh(geo, mat);
+        floor.position.set(0, 0, z + Config.chunkSize/2);
+        Renderer.scene.add(floor);
+        this.chunks.push(floor);
+
+        // Spawn Assets on this chunk
+        if(z > 40) this.populateChunk(z);
+    },
+
+    populateChunk(zOffset) {
+        for(let i=0; i<3; i++) {
+            const z = zOffset + (i * 12);
+            if(Math.random() > 0.6) this.spawnObstacle(z);
+            else this.spawnCoin(z);
+        }
+    },
+
+    spawnObstacle(z) {
+        const obs = new THREE.Mesh(
+            new THREE.BoxGeometry(3, 4, 1),
+            new THREE.MeshStandardMaterial({ color: 0xff0055 })
+        );
+        obs.position.set((Math.floor(Math.random()*3)-1)*Config.laneWidth, 2, z);
+        Renderer.scene.add(obs);
+        this.obstacles.push(obs);
+    },
+
+    spawnCoin(z) {
+        const coin = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5, 16, 16),
+            new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffaa00 })
+        );
+        coin.position.set((Math.floor(Math.random()*3)-1)*Config.laneWidth, 1.5, z);
+        Renderer.scene.add(coin);
+        this.coins.push(coin);
+    },
+
+    update() {
+        // Recycle Chunks
+        if(Player.mesh.position.z > this.chunks[0].position.z + Config.chunkSize) {
+            const old = this.chunks.shift();
+            old.position.z += Config.maxChunks * Config.chunkSize;
+            this.chunks.push(old);
+            this.populateChunk(old.position.z - Config.chunkSize/2);
+        }
+
+        // Check Collisions
+        this.obstacles.forEach((o, i) => {
+            if(o.position.distanceTo(Player.mesh.position) < 1.8) Core.active = false;
+        });
+
+        this.coins.forEach((c, i) => {
+            if(c.position.distanceTo(Player.mesh.position) < 1.5) {
+                Renderer.scene.remove(c);
+                this.coins.splice(i, 1);
+                Core.score += 10;
+                Config.speed += 0.0005;
+            }
+        });
+    }
+};
+
+const Controls = {
+    bind() {
+        let tsX = 0, tsY = 0;
+        window.addEventListener('touchstart', e => { 
+            tsX = e.touches[0].clientX; 
+            tsY = e.touches[0].clientY; 
+        });
+        window.addEventListener('touchend', e => {
+            const dx = e.changedTouches[0].clientX - tsX;
+            const dy = e.changedTouches[0].clientY - tsY;
+            if(Math.abs(dx) > Math.abs(dy)) {
+                if(dx > 40) Player.lane = Math.min(1, Player.lane+1);
+                if(dx < -40) Player.lane = Math.max(-1, Player.lane-1);
+            } else {
+                if(dy < -40 && Player.isGrounded) {
+                    Player.vy = Config.jumpForce;
+                    Player.isGrounded = false;
+                }
+            }
+        });
+    }
+};
+
+const UI = {
+    refresh() {
+        document.getElementById('ui-score').innerText = Math.floor(Core.score);
+    }
+};
+
+Renderer.setup();
 </script>
 </body>
 </html>
