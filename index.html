@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>JUNGLE MISSION 3D</title>
+    <title>JUNGLE MISSION 3D: FINAL</title>
     <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap" rel="stylesheet">
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Black Ops One', cursive; touch-action: none; color: white; }
@@ -11,35 +11,29 @@
         .spinner { width: 50px; height: 50px; border: 5px solid gold; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; background: rgba(0,0,0,0.85); }
-        .btn { background: gold; color: black; border: none; padding: 15px 50px; font-size: 20px; border-radius: 10px; cursor: pointer; font-weight: bold; margin: 10px; }
-        #mission-page { display: none; background: #111; z-index: 110; }
-        .mission-item { background: #222; padding: 10px; margin: 5px; border-left: 5px solid gold; width: 80%; }
+        .btn { background: gold; color: black; border: none; padding: 15px 50px; font-size: 20px; border-radius: 10px; cursor: pointer; font-weight: bold; margin: 10px; box-shadow: 0 5px #b8860b; }
+        .btn:active { transform: translateY(3px); box-shadow: 0 2px #b8860b; }
+        #game-hud { position: absolute; top: 10px; width: 100%; display: none; justify-content: space-around; z-index: 50; font-size: 22px; color: gold; text-shadow: 2px 2px #000; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div id="loading-screen">
     <div class="spinner"></div>
-    <p>LOADING ROBOT & WORLD...</p>
+    <p>BUILDING JUNGLE & MONSTERS...</p>
 </div>
 
 <div id="home-page" class="screen">
-    <h1 style="color:gold; font-size: 40px;">PRO RUNNER v10</h1>
+    <h1 style="color:gold; font-size: 45px; margin-bottom: 0;">JUNGLE RUNNER</h1>
+    <p style="color: #0f0; margin-bottom: 20px;">3D MEGA PROJECT ACTIVE</p>
     <div style="background: #222; padding: 20px; border-radius: 15px; border: 2px solid gold; width: 70%; text-align: center; margin-bottom: 20px;">
         <p>🏆 BEST: <span id="best-score">0</span></p>
         <p>💎 GEMS: <span id="total-gems">0</span></p>
     </div>
     <button class="btn" onclick="startGame()">START MISSION</button>
-    <button class="btn" style="background:#0ff;" onclick="showMissionPage()">MISSIONS</button>
 </div>
 
-<div id="mission-page" class="screen">
-    <h1 style="color:#0f0;">MISSION LOG</h1>
-    <div id="mission-list" style="width: 80%;"></div>
-    <button class="btn" style="background:white;" onclick="hideMissionPage()">BACK</button>
-</div>
-
-<div id="game-hud" style="position: absolute; top: 10px; width: 100%; display: none; justify-content: space-around; z-index: 50; font-size: 20px; color: gold; pointer-events: none;">
+<div id="game-hud">
     <div>SCORE: <span id="current-score">0</span></div>
     <div style="color:#d000ff;">💎 <span id="current-gems">0</span></div>
 </div>
@@ -48,262 +42,55 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
-// --- ALL PARTS COMBINED CORRECTLY ---
 let scene, camera, renderer, player, mixer, clock = new THREE.Clock();
-let gameActive = false, score = 0, sessionGems = 0, speed = 1.0, currentLane = 0, vy = 0;
-let tiles = [], obstacles = [], items = [];
+let gameActive = false, score = 0, sessionGems = 0, speed = 1.3, currentLane = 0;
+let tiles = [], obstacles = [], items = [], decorations = [];
 const LANES = [-4, 0, 4];
+let isMagnetActive = false, magnetTimer = 0, monster;
 
-let db = JSON.parse(localStorage.getItem('mega_run_db')) || {
-    best: 0, gems: 0, missionLevel: 1, unlockedMaps: ['Jungle']
-};
-
+let db = JSON.parse(localStorage.getItem('mega_run_db')) || { best: 0, gems: 0, missionLevel: 1 };
 function saveDB() { localStorage.setItem('mega_run_db', JSON.stringify(db)); }
 
-function initBase() {
+function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB);
-    scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
+    scene.background = new THREE.Color(0x050510);
+    scene.fog = new THREE.FogExp2(0x050510, 0.015);
+
     camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
-    scene.add(new THREE.AmbientLight(0xffffff, 1));
-    const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
     sun.position.set(10, 50, 10);
     scene.add(sun);
+
+    // Initial Spawning
+    createMonster();
+    for(let i=0; i<15; i++) spawnRoad(i*30);
+    loadRobot();
+    setupControls();
+    
+    document.getElementById('best-score').innerText = db.best;
+    document.getElementById('total-gems').innerText = db.gems;
+    animate();
 }
 
-function createRoadTile(zPos) {
-    const tile = new THREE.Mesh(new THREE.BoxGeometry(14, 0.8, 30), new THREE.MeshStandardMaterial({ color: 0x3d2b1f }));
+function spawnRoad(zPos) {
+    const tile = new THREE.Mesh(new THREE.BoxGeometry(14, 0.8, 31), new THREE.MeshStandardMaterial({ color: 0x2d1f14 }));
     tile.position.set(0, 0, zPos);
     scene.add(tile);
     tiles.push(tile);
+    
     if(zPos > 60) {
         if(Math.random() > 0.6) spawnObstacle(zPos);
-        if(Math.random() > 0.5) spawnItems(zPos);
+        if(Math.random() > 0.4) spawnItems(zPos);
+        if(Math.random() > 0.8) spawnTrees(zPos);
     }
 }
 
-function spawnObstacle(zPos) {
-    const isHigh = Math.random() > 0.7;
-    const obs = new THREE.Mesh(isHigh ? new THREE.BoxGeometry(14, 1.5, 1) : new THREE.BoxGeometry(4, 2.5, 1), new THREE.MeshStandardMaterial({ color: isHigh ? 0xffff00 : 0xff0000 }));
-    obs.position.set(isHigh ? 0 : LANES[Math.floor(Math.random()*3)], isHigh ? 4.5 : 1, zPos);
-    scene.add(obs); obstacles.push(obs);
-}
-
-function spawnItems(zPos) {
-    const type = Math.random() > 0.85 ? 'gem' : 'coin';
-    const item = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshStandardMaterial({ color: type === 'gem' ? 0xd000ff : 0xffff00 }));
-    item.position.set(LANES[Math.floor(Math.random()*3)], 1.5, zPos);
-    item.userData = {type}; scene.add(item); items.push(item);
-}
-
-function loadPlayer() {
-    new THREE.GLTFLoader().load('https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb', (gltf) => {
-        player = gltf.scene; player.scale.set(0.4, 0.4, 0.4); player.rotation.y = Math.PI;
-        scene.add(player);
-        mixer = new THREE.AnimationMixer(player);
-        mixer.clipAction(gltf.animations.find(a => a.name === 'Running')).play();
-        document.getElementById('loading-screen').style.display = 'none';
-    });
-}
-
-function startGame() {
-    document.getElementById('home-page').style.display = 'none';
-    document.getElementById('game-hud').style.display = 'flex';
-    gameActive = true; score = 0; sessionGems = 0; speed = 1.2;
-}
-
-function showMissionPage() {
-    document.getElementById('home-page').style.display = 'none';
-    document.getElementById('mission-page').style.display = 'flex';
-    const list = document.getElementById('mission-list');
-    list.innerHTML = `<div class="mission-item">Mission ${db.missionLevel}: Reach ${db.missionLevel * 1000} Score</div>`;
-}
-
-function hideMissionPage() { document.getElementById('mission-page').style.display = 'none'; document.getElementById('home-page').style.display = 'flex'; }
-
-function handleControls() {
-    let startX;
-    window.addEventListener('touchstart', e => startX = e.touches[0].clientX);
-    window.addEventListener('touchend', e => {
-        let diff = e.changedTouches[0].clientX - startX;
-        if(diff > 40) currentLane = Math.max(-1, currentLane - 1); // Inverse
-        if(diff < -40) currentLane = Math.min(1, currentLane + 1); // Inverse
-    });
-}
-
-function updateGame() {
-    if(!gameActive || !player) return;
-    player.position.z += speed;
-    score++; document.getElementById('current-score').innerText = score;
-    player.position.x += (LANES[currentLane+1] - player.position.x) * 0.15;
-
-    if(player.position.z > tiles[0].position.z + 30) {
-        let t = tiles.shift(); t.position.z += tiles.length * 30 + 30;
-        tiles.push(t);
-        spawnObstacle(t.position.z); spawnItems(t.position.z);
-    }
-
-    items.forEach((item, i) => {
-        if(player.position.distanceTo(item.position) < 2) {
-            if(item.userData.type === 'gem') { sessionGems++; db.gems++; }
-            scene.remove(item); items.splice(i,1); saveDB();
-            document.getElementById('current-gems').innerText = sessionGems;
-        }
-    });
-
-    obstacles.forEach(obs => {
-        if(player.position.distanceTo(obs.position) < 2) {
-            gameActive = false; alert("CRASHED! Score: " + score);
-            if(score > db.best) db.best = score; saveDB(); location.reload();
-        }
-    });
-}
-
-function loop() {
-    requestAnimationFrame(loop);
-    const dt = clock.getDelta();
-    if(mixer) mixer.update(dt);
-    updateGame();
-    if(player) {
-        camera.position.set(player.position.x * 0.5, 7, player.position.z - 12);
-        camera.lookAt(player.position.x, 2, player.position.z + 10);
-    }
-    renderer.render(scene, camera);
-}
-
-initBase();
-for(let i=0; i<15; i++) createRoadTile(i*30);
-loadPlayer();
-handleControls();
-document.getElementById('best-score').innerText = db.best;
-document.getElementById('total-gems').innerText = db.gems;
-loop();
-</script>
-</body>
-</html>
-// --- MEGA UPDATE: PARTS 14-19 START ---
-
-let isMagnetActive = false;
-let monster;
-let magnetTimer = 0;
-
-// Monster ko game mein shamil karna
-function initMonster() {
-    const mGeo = new THREE.BoxGeometry(2.5, 5, 2);
-    const mMat = new THREE.MeshStandardMaterial({ 
-        color: 0x660000, 
-        emissive: 0xff0000, 
-        emissiveIntensity: 0.5 
-    });
-    monster = new THREE.Mesh(mGeo, mMat);
-    scene.add(monster);
-}
-
-// Magnet Power-up banane wala function
-function spawnPowerUp(zPos) {
-    if (Math.random() > 0.85) { 
-        const magGeo = new THREE.TorusGeometry(0.5, 0.2, 8, 16);
-        const magMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 1 });
-        const magnet = new THREE.Mesh(magGeo, magMat);
-        magnet.position.set(LANES[Math.floor(Math.random()*3)], 1.8, zPos);
-        magnet.userData = { type: 'magnet' };
-        scene.add(magnet);
-        items.push(magnet);
-    }
-}
-
-// PURANE UPDATEGAME KO YE NAYA WALA REPLACE KAREGA
-function updateGame() {
-    if(!gameActive || !player) return;
-
-    // 1. Movement & Score
-    player.position.z += speed;
-    score++; 
-    document.getElementById('current-score').innerText = score;
-    player.position.x += (LANES[currentLane+1] - player.position.x) * 0.15;
-
-    // 2. Monster Follow (Temple Run feel)
-    if(monster) {
-        monster.position.x += (player.position.x - monster.position.x) * 0.05;
-        monster.position.z = player.position.z - 10; 
-    }
-
-    // 3. Road Recycling & Spawning
-    if(player.position.z > tiles[0].position.z + 30) {
-        let t = tiles.shift(); 
-        t.position.z += tiles.length * 30 + 30;
-        tiles.push(t);
-        spawnObstacle(t.position.z); 
-        spawnItems(t.position.z);
-        spawnPowerUp(t.position.z); 
-    }
-
-    // 4. Magnet & Coins Logic
-    items.forEach((item, i) => {
-        if (isMagnetActive && item.userData.type === 'coin') {
-            item.position.lerp(player.position, 0.2);
-        }
-        if(player.position.distanceTo(item.position) < 2) {
-            if(item.userData.type === 'magnet') {
-                isMagnetActive = true;
-                magnetTimer = 500;
-            } else if(item.userData.type === 'gem') {
-                sessionGems++; db.gems++;
-            }
-            scene.remove(item);
-            items.splice(i, 1);
-            saveDB();
-            document.getElementById('current-gems').innerText = sessionGems;
-        }
-    });
-
-    if(isMagnetActive) {
-        magnetTimer--;
-        if(magnetTimer <= 0) isMagnetActive = false;
-    }
-
-    // 5. Collision Check (Marna)
-    obstacles.forEach(obs => {
-        if(player.position.distanceTo(obs.position) < 2.2) {
-            gameActive = false;
-            alert("GAME OVER! Monster Caught or Crashed!");
-            location.reload();
-        }
-    });
-}
-
-// Graphics ko dark aur cool banana
-scene.fog = new THREE.FogExp2(0x1a1a2e, 0.01);
-renderer.setClearColor(0x1a1a2e);
-
-initMonster(); 
-// --- END OF MEGA UPDATE ---
-  // --- FINAL MEGA UPDATE: PARTS 20-25 (FIRE, BOOST & FINISH) ---
-
-// 1. Fire Traps (Part 20) - Raste par aag ke gole
-function spawnFire(zPos) {
-    if (Math.random() > 0.9) { 
-        const fireGeo = new THREE.SphereGeometry(1.2, 8, 8);
-        const fireMat = new THREE.MeshStandardMaterial({ 
-            color: 0xff4400, 
-            emissive: 0xff0000, 
-            emissiveIntensity: 2 
-        });
-        const fire = new THREE.Mesh(fireGeo, fireMat);
-        fire.position.set(LANES[Math.floor(Math.random()*3)], 0.5, zPos);
-        fire.userData = { type: 'fire' };
-        scene.add(fire);
-        obstacles.push(fire); // Aag se takraye toh game over
-    }
-}
-
-// 2. Speed Boost (Part 21) - Blue Arrows jo speed badhayenge
-function spawnBoost(zPos) {
-    if (Math.random() > 0.95) {
-        const boostGeo = new THREE.ConeGeometry(0.5, 1, 4);
-        const boostMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff });
-        const boost = new THREE.Mesh(
-            
+function spawnTrees(zPos) {
+    const tree = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 6), new THREE.
+                                 
