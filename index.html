@@ -1,589 +1,187 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>JUNGLE MISSION 3D: MEGA PROJECT</title>
-    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap" rel="stylesheet">
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Black Ops One', cursive; touch-action: none; color: white; }
-        #loading-screen { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 500; }
-        .spinner { width: 50px; height: 50px; border: 5px solid gold; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JUNGLE MISSION 3D</title>
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap" rel="stylesheet">
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Black Ops One', cursive; touch-action: none; color: white; }
+        #loading-screen { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 500; }
+        .spinner { width: 50px; height: 50px; border: 5px solid gold; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; background: rgba(0,0,0,0.85); }
+        .btn { background: gold; color: black; border: none; padding: 15px 50px; font-size: 20px; border-radius: 10px; cursor: pointer; font-weight: bold; margin: 10px; }
+        #mission-page { display: none; background: #111; z-index: 110; }
+        .mission-item { background: #222; padding: 10px; margin: 5px; border-left: 5px solid gold; width: 80%; }
+    </style>
 </head>
 <body>
 
 <div id="loading-screen">
-    <div class="spinner"></div>
-    <p>INITIALIZING ENGINE...</p>
+    <div class="spinner"></div>
+    <p>LOADING ROBOT & WORLD...</p>
+</div>
+
+<div id="home-page" class="screen">
+    <h1 style="color:gold; font-size: 40px;">PRO RUNNER v10</h1>
+    <div style="background: #222; padding: 20px; border-radius: 15px; border: 2px solid gold; width: 70%; text-align: center; margin-bottom: 20px;">
+        <p>🏆 BEST: <span id="best-score">0</span></p>
+        <p>💎 GEMS: <span id="total-gems">0</span></p>
+    </div>
+    <button class="btn" onclick="startGame()">START MISSION</button>
+    <button class="btn" style="background:#0ff;" onclick="showMissionPage()">MISSIONS</button>
+</div>
+
+<div id="mission-page" class="screen">
+    <h1 style="color:#0f0;">MISSION LOG</h1>
+    <div id="mission-list" style="width: 80%;"></div>
+    <button class="btn" style="background:white;" onclick="hideMissionPage()">BACK</button>
+</div>
+
+<div id="game-hud" style="position: absolute; top: 10px; width: 100%; display: none; justify-content: space-around; z-index: 50; font-size: 20px; color: gold; pointer-events: none;">
+    <div>SCORE: <span id="current-score">0</span></div>
+    <div style="color:#d000ff;">💎 <span id="current-gems">0</span></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
-/** * PART 1: GLOBAL VARIABLES & INITIALIZATION 
-*/
+// --- ALL PARTS COMBINED CORRECTLY ---
 let scene, camera, renderer, player, mixer, clock = new THREE.Clock();
 let gameActive = false, score = 0, sessionGems = 0, speed = 1.0, currentLane = 0, vy = 0;
-let tiles = [], obstacles = [], items = [], decorations = [];
+let tiles = [], obstacles = [], items = [];
+const LANES = [-4, 0, 4];
 
-// Local Storage Database
 let db = JSON.parse(localStorage.getItem('mega_run_db')) || {
-    best: 0, gems: 0, missionLevel: 1, 
-    unlockedMaps: ['Jungle'], currentMap: 'Jungle'
+    best: 0, gems: 0, missionLevel: 1, unlockedMaps: ['Jungle']
 };
 
 function saveDB() { localStorage.setItem('mega_run_db', JSON.stringify(db)); }
 
-// Scene Setup Function
 function initBase() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // Will change with Maps
-    scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
-
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    document.body.appendChild(renderer.domElement);
-
-    const light = new THREE.AmbientLight(0xffffff, 1);
-    const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-    sun.position.set(10, 50, 10);
-    scene.add(light, sun);
-
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+    scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    scene.add(new THREE.AmbientLight(0xffffff, 1));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+    sun.position.set(10, 50, 10);
+    scene.add(sun);
 }
-
-initBase();
-// --- END OF PART 1 ---
-</script>
-<div id="home-page" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; background: rgba(0,0,0,0.85);">
-    <h1 style="color:gold; font-size: 40px; margin-bottom: 10px;">PRO RUNNER v10</h1>
-    <div style="background: #222; padding: 20px; border-radius: 15px; border: 2px solid gold; width: 70%; text-align: center; margin-bottom: 20px;">
-        <p>🏆 BEST: <span id="best-score">0</span></p>
-        <p>💎 GEMS: <span id="total-gems">0</span></p>
-    </div>
-    <button onclick="startGame()" style="background:gold; color:black; border:none; padding: 15px 50px; font-size: 20px; border-radius: 10px; cursor: pointer; font-weight: bold; margin: 5px;">START MISSION</button>
-    <button onclick="showMissionPage()" style="background:#0ff; border:none; padding: 10px 40px; font-size: 16px; border-radius: 10px; cursor: pointer; margin: 5px;">MISSIONS</button>
-</div>
-
-<div id="mission-page" style="position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 110; background: #111;">
-    <h1 style="color:#0f0;">MISSION LOG</h1>
-    <div id="mission-list" style="width: 80%; margin-bottom: 20px;"></div>
-    <button onclick="hideMissionPage()" style="background:white; color:black; padding: 10px 30px; border-radius: 5px;">BACK</button>
-</div>
-
-<div id="game-hud" style="position: absolute; top: 10px; width: 100%; display: none; justify-content: space-around; z-index: 50; font-size: 20px; color: gold;">
-    <div>SCORE: <span id="current-score">0</span></div>
-    <div style="color:#d000ff;">💎 <span id="current-gems">0</span></div>
-</div>
-// --- PART 3: UI NAVIGATION & DB LOGIC (Paste inside <script> after Part 1) ---
-
-function updateHomeStats() {
-    document.getElementById('best-score').innerText = db.best;
-    document.getElementById('total-gems').innerText = db.gems;
-}
-
-function showMissionPage() {
-    document.getElementById('home-page').style.display = 'none';
-    document.getElementById('mission-page').style.display = 'flex';
-    renderMissions();
-}
-
-function hideMissionPage() {
-    document.getElementById('mission-page').style.display = 'none';
-    document.getElementById('home-page').style.display = 'flex';
-}
-
-function startGame() {
-    document.getElementById('home-page').style.display = 'none';
-    document.getElementById('game-hud').style.display = 'flex';
-    document.getElementById('loading-screen').style.display = 'none';
-    gameActive = true;
-    // Animation logic will be triggered here in later parts
-}
-
-// Initial Call to sync data
-updateHomeStats();
-
-// --- END OF PART 3 ---
-
-// --- PART 4: WORLD BUILDER (Paste after Part 3 inside <script>) ---
-
-const TILE_LIMIT = 15; // Kitne raste ke tukde ek sath dikhenge
-const TILE_SIZE = 30;  // Ek tukde ki lambai
 
 function createRoadTile(zPos) {
-    // Road Material (Brownish Dirt)
-    const roadGeo = new THREE.BoxGeometry(14, 0.8, TILE_SIZE);
-    const roadMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f });
-    const tile = new THREE.Mesh(roadGeo, roadMat);
-    
-    tile.position.set(0, 0, zPos); // Ekdum seedha rasta
-    scene.add(tile);
-    tiles.push(tile);
-
-    // Raste ke side mein grass ya mitti
-    const grassGeo = new THREE.PlaneGeometry(100, TILE_SIZE);
-    const grassMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
-    const leftGrass = new THREE.Mesh(grassGeo, grassMat);
-    leftGrass.rotation.x = -Math.PI / 2;
-    leftGrass.position.set(-57, -0.4, zPos);
-    scene.add(leftGrass);
-    
-    const rightGrass = leftGrass.clone();
-    rightGrass.position.x = 57;
-    scene.add(rightGrass);
-}
-
-// Shuruat me rasta banana
-function buildInitialMap() {
-    for (let i = 0; i < TILE_LIMIT; i++) {
-        createRoadTile(i * TILE_SIZE);
-    }
-}
-
-buildInitialMap();
-
-// --- END OF PART 4 ---
-
-// --- PART 5: THE CHARACTER LOADER (Paste after Part 4 inside <script>) ---
-
-const loader = new THREE.GLTFLoader();
-
-function loadPlayer() {
-    // Robot model ka link (Ye online server se load hota hai)
-    const modelUrl = 'https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
-    
-    loader.load(modelUrl, (gltf) => {
-        player = gltf.scene;
-        player.scale.set(0.4, 0.4, 0.4); // Character ka size
-        player.rotation.y = Math.PI;    // Character ka muh raaste ki taraf
-        player.position.set(0, 0.5, 0); // Zameen ke thoda upar
-        scene.add(player);
-
-        // Animation setup: Robot bhagna shuru karega
-        mixer = new THREE.AnimationMixer(player);
-        const runAnim = gltf.animations.find(a => a.name === 'Running');
-        if (runAnim) {
-            mixer.clipAction(runAnim).play();
-        }
-        
-        // Loading screen ko hata dena jab model load ho jaye
-        document.getElementById('loading-screen').style.display = 'none';
-    }, 
-    (xhr) => {
-        // Kitna percent load hua (Optional console check)
-        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
-    }, 
-    (error) => {
-        console.error('An error happened while loading the model', error);
-    });
-}
-
-loadPlayer();
-
-// --- END OF PART 5 ---
-
-// --- PART 6: THE RENDER LOOP (Paste after Part 5 inside <script>) ---
-
-function renderLoop() {
-    requestAnimationFrame(renderLoop); // Ye screen ko har second 60 baar refresh karta hai
-
-    const delta = clock.getDelta(); // Time ka hisab rakhne ke liye
-    
-    // Agar animation mixer load ho gaya hai, toh use update karo
-    if (mixer) mixer.update(delta);
-
-    // Camera ko player ke peeche set karna (Third Person View)
-    if (player) {
-        // Camera ko player ke thoda upar aur peeche rakha hai
-        camera.position.set(player.position.x * 0.5, 7, player.position.z - 12);
-        camera.lookAt(player.position.x, 2, player.position.z + 10);
-    }
-
-    // Saari cheezon ko screen par dikhana
-    renderer.render(scene, camera);
-}
-
-// Loop ko chalu karna
-renderLoop();
-
-// --- END OF PART 6 ---
-
-// --- PART 7: THE MOVEMENT LOGIC (Paste after Part 6 inside <script>) ---
-
-function handleMovement() {
-    if (!gameActive || !player) return;
-
-    // 1. Robot ko aage badhana (Speed ke hisab se)
-    player.position.z += speed;
-
-    // 2. Score ko badhana (Duree ke hisab se)
-    score += 1;
-    document.getElementById('current-score').innerText = Math.floor(score);
-
-    // 3. Raaste ko hamesha ke liye banana (Recycling)
-    // Agar player pehle tile ko paar kar le, toh us tile ko utha kar aage rakh do
-    if (player.position.z > tiles[0].position.z + TILE_SIZE) {
-        let firstTile = tiles.shift(); // Pehla tile nikala
-        firstTile.position.z += tiles.length * TILE_SIZE + TILE_SIZE; // Use sabse aage bheja
-        tiles.push(firstTile); // List mein wapas joada
-    }
-
-    // 4. Speed ko dheere-dheere badhana (Difficulty)
-    if (score % 500 === 0) {
-        speed += 0.05;
-    }
-}
-
-// Ab Render Loop (Part 6) mein is movement ko jodo
-// Dhyaan do: Tumhe renderLoop function ke andar renderer.render se pehle handleMovement() likhna hoga
-// Ya fir main agle parts mein iska updated loop de dunga. Filhaal ise niche paste kar do.
-
-// --- END OF PART 7 ---
-
-// --- PART 8: THE ANIMATION CONNECTOR (Paste after Part 7 inside <script>) ---
-
-// Hum Part 6 wale renderLoop ko update kar rahe hain 
-// taaki wo Movement aur Physics ko har frame mein chalaye.
-
-function updateGame() {
-    if (gameActive) {
-        handleMovement(); // Jo Part 7 mein banaya tha
-        
-        // Agar aapne Part 9 (Controls) likh liya hota toh wo bhi yahan judta
-        // Filhaal hum sirf movement aur camera ko sync kar rahe hain
-    }
-}
-
-// Ye purane renderLoop ko replace karne ki zaroorat nahi hai, 
-// bas uske andar ye line add karni hai. 
-// Lekin asani ke liye main loop ko yahan sahi se rewrite kar raha hoon:
-
-function finalLoop() {
-    requestAnimationFrame(finalLoop);
-    
-    const delta = clock.getDelta();
-    if (mixer) mixer.update(delta);
-
-    if (gameActive) {
-        updateGame(); 
-    }
-
-    if (player) {
-        // Camera Follow Logic
-        camera.position.lerp(new THREE.Vector3(player.position.x * 0.5, 7, player.position.z - 12), 0.1);
-        camera.lookAt(player.position.x, 2, player.position.z + 10);
-    }
-
-    renderer.render(scene, camera);
-}
-
-// Purane renderLoop ko stop karke ise start karte hain
-finalLoop();
-
-// --- END OF PART 8 ---
-
-// --- PART 9: THE INVERSE CONTROLS (Paste after Part 8 inside <script>) ---
-
-let touchStartX = 0;
-let touchStartY = 0;
-
-const LANES = [-4, 0, 4]; // Teen lanes: Left, Middle, Right
-
-function handleSwipe() {
-    window.addEventListener('touchstart', (e) => {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-    });
-
-    window.addEventListener('touchend', (e) => {
-        let touchEndX = e.changedTouches[0].clientX;
-        let touchEndY = e.changedTouches[0].clientY;
-
-        let diffX = touchEndX - touchStartX;
-        let diffY = touchEndY - touchStartY;
-
-        // Swipe ki pehchan (Horizontal vs Vertical)
-        if (Math.abs(diffX) > Math.abs(diffY)) {
-            // HORIZONTAL SWIPE (Left/Right)
-            if (diffX > 40) {
-                // RIGHT SWIPE -> Move LEFT (Inverse)
-                currentLane = Math.max(-1, currentLane - 1);
-            } else if (diffX < -40) {
-                // LEFT SWIPE -> Move RIGHT (Inverse)
-                currentLane = Math.min(1, currentLane + 1);
-            }
-        } else {
-            // VERTICAL SWIPE (Up/Down)
-            if (diffY < -40) {
-                // UP SWIPE -> JUMP
-                if (player.position.y <= 0.6) vy = 0.28;
-            } else if (diffY > 40) {
-                // DOWN SWIPE -> SLIDE
-                player.scale.y = 0.2; 
-                setTimeout(() => { player.scale.y = 0.4; }, 600);
-            }
-        }
-    });
-}
-
-// Lane change ko smooth banane ke liye player ki position update karna
-function updatePlayerLane() {
-    if (!player) return;
-    
-    // Target position lane ke hisab se
-    let targetX = LANES[currentLane + 1];
-    
-    // Lerp se smooth movement (0.15 speed se slide karega)
-    player.position.x += (targetX - player.position.x) * 0.15;
-
-    // Gravity aur Jump ka hisab
-    vy -= 0.015; // Gravity force
-    player.position.y += vy;
-    if (player.position.y < 0.5) {
-        player.position.y = 0.5;
-        vy = 0;
-    }
-}
-
-// Controls chalu karein
-handleSwipe();
-
-// Ab humein updateGame function (Part 8) mein updatePlayerLane() ko call karna hoga.
-// Wo main Part 10 mein sync kar dunga.
-
-// --- END OF PART 9 ---
-
-// --- PART 10: OBSTACLES & COLLISION (Paste after Part 9 inside <script>) ---
-
-function spawnObstacle(zPos) {
-    if (Math.random() > 0.6) { // 40% chance ki obstacle aaye
-        const isHigh = Math.random() > 0.7; // 30% chance ki jump wala obstacle ho
-        
-        const obsGeo = isHigh ? new THREE.BoxGeometry(14, 1.5, 1) : new THREE.BoxGeometry(4, 2.5, 1);
-        const obsMat = new THREE.MeshStandardMaterial({ color: isHigh ? 0xffff00 : 0xff0000 });
-        const obstacle = new THREE.Mesh(obsGeo, obsMat);
-        
-        // Agar high hai toh beech mein, warna kisi ek lane mein
-        const xPos = isHigh ? 0 : LANES[Math.floor(Math.random() * 3)];
-        const yPos = isHigh ? 4.5 : 1;
-        
-        obstacle.position.set(xPos, yPos, zPos);
-        scene.add(obstacle);
-        obstacles.push(obstacle);
+    const tile = new THREE.Mesh(new THREE.BoxGeometry(14, 0.8, 30), new THREE.MeshStandardMaterial({ color: 0x3d2b1f }));
+    tile.position.set(0, 0, zPos);
+    scene.add(tile);
+    tiles.push(tile);
+    if(zPos > 60) {
+        if(Math.random() > 0.6) spawnObstacle(zPos);
+        if(Math.random() > 0.5) spawnItems(zPos);
     }
 }
 
-// Part 7 ke handleMovement mein humne tile recycling ki thi, 
-// ab wahan har naye tile par obstacle spawn karenge.
-// (Main Part 11 mein saari physics ko ek saath updateGame function mein jodd dunga)
+function spawnObstacle(zPos) {
+    const isHigh = Math.random() > 0.7;
+    const obs = new THREE.Mesh(isHigh ? new THREE.BoxGeometry(14, 1.5, 1) : new THREE.BoxGeometry(4, 2.5, 1), new THREE.MeshStandardMaterial({ color: isHigh ? 0xffff00 : 0xff0000 }));
+    obs.position.set(isHigh ? 0 : LANES[Math.floor(Math.random()*3)], isHigh ? 4.5 : 1, zPos);
+    scene.add(obs); obstacles.push(obs);
+}
 
-function checkCollisions() {
-    if (!player || !gameActive) return;
+function spawnItems(zPos) {
+    const type = Math.random() > 0.85 ? 'gem' : 'coin';
+    const item = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshStandardMaterial({ color: type === 'gem' ? 0xd000ff : 0xffff00 }));
+    item.position.set(LANES[Math.floor(Math.random()*3)], 1.5, zPos);
+    item.userData = {type}; scene.add(item); items.push(item);
+}
 
-    obstacles.forEach((obs, index) => {
-        // Player aur Obstacle ke beech ki doori check karna
-        const distance = player.position.distanceTo(obs.position);
+function loadPlayer() {
+    new THREE.GLTFLoader().load('https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb', (gltf) => {
+        player = gltf.scene; player.scale.set(0.4, 0.4, 0.4); player.rotation.y = Math.PI;
+        scene.add(player);
+        mixer = new THREE.AnimationMixer(player);
+        mixer.clipAction(gltf.animations.find(a => a.name === 'Running')).play();
+        document.getElementById('loading-screen').style.display = 'none';
+    });
+}
 
-        if (distance < 2.2) {
-            // Agar slide kar rahe ho aur obstacle upar hai toh bach jaoge
-            if (obs.position.y > 4 && player.scale.y < 0.3) {
-                return; 
-            }
-            
-            // Warna GAME OVER
-            gameOver();
+function startGame() {
+    document.getElementById('home-page').style.display = 'none';
+    document.getElementById('game-hud').style.display = 'flex';
+    gameActive = true; score = 0; sessionGems = 0; speed = 1.2;
+}
+
+function showMissionPage() {
+    document.getElementById('home-page').style.display = 'none';
+    document.getElementById('mission-page').style.display = 'flex';
+    const list = document.getElementById('mission-list');
+    list.innerHTML = `<div class="mission-item">Mission ${db.missionLevel}: Reach ${db.missionLevel * 1000} Score</div>`;
+}
+
+function hideMissionPage() { document.getElementById('mission-page').style.display = 'none'; document.getElementById('home-page').style.display = 'flex'; }
+
+function handleControls() {
+    let startX;
+    window.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+    window.addEventListener('touchend', e => {
+        let diff = e.changedTouches[0].clientX - startX;
+        if(diff > 40) currentLane = Math.max(-1, currentLane - 1); // Inverse
+        if(diff < -40) currentLane = Math.min(1, currentLane + 1); // Inverse
+    });
+}
+
+function updateGame() {
+    if(!gameActive || !player) return;
+    player.position.z += speed;
+    score++; document.getElementById('current-score').innerText = score;
+    player.position.x += (LANES[currentLane+1] - player.position.x) * 0.15;
+
+    if(player.position.z > tiles[0].position.z + 30) {
+        let t = tiles.shift(); t.position.z += tiles.length * 30 + 30;
+        tiles.push(t);
+        spawnObstacle(t.position.z); spawnItems(t.position.z);
+    }
+
+    items.forEach((item, i) => {
+        if(player.position.distanceTo(item.position) < 2) {
+            if(item.userData.type === 'gem') { sessionGems++; db.gems++; }
+            scene.remove(item); items.splice(i,1); saveDB();
+            document.getElementById('current-gems').innerText = sessionGems;
         }
+    });
 
-        // Jo obstacles peeche chhut gaye unhe delete karna (Memory bachaane ke liye)
-        if (obs.position.z < player.position.z - 20) {
-            scene.remove(obs);
-            obstacles.splice(index, 1);
+    obstacles.forEach(obs => {
+        if(player.position.distanceTo(obs.position) < 2) {
+            gameActive = false; alert("CRASHED! Score: " + score);
+            if(score > db.best) db.best = score; saveDB(); location.reload();
         }
     });
 }
 
-function gameOver() {
-    gameActive = false;
-    alert("CRASHED! Final Score: " + Math.floor(score));
-    
-    // Best score save karna
-    if (score > db.best) {
-        db.best = Math.floor(score);
-        saveDB();
-    }
-    
-    location.reload(); // Game reset karne ke liye
-}
-
-// Part 8 ke updateGame function mein ab ye do cheezein jodni hai:
-function updatePhysics() {
-    updatePlayerLane(); // Lane change smooth karna (Part 9)
-    checkCollisions();  // Takkar check karna (Part 10)
-}
-
-// --- END OF PART 10 ---
-
-// --- PART 11: COINS & GEMS (Paste after Part 10 inside <script>) ---
-
-function spawnItems(zPos) {
-    // 50% chance ki coin ya gem dikhe
-    if (Math.random() > 0.5) {
-        const type = Math.random() > 0.85 ? 'gem' : 'coin'; // 15% chance Gem ka
-        
-        // Coin/Gem ki shakal (Geometry)
-        const itemGeo = type === 'gem' ? new THREE.OctahedronGeometry(0.6) : new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16);
-        const itemMat = new THREE.MeshStandardMaterial({ 
-            color: type === 'gem' ? 0xd000ff : 0xffff00,
-            metalness: 0.8,
-            roughness: 0.2
-        });
-        
-        const item = new THREE.Mesh(itemGeo, itemMat);
-        
-        // Gem/Coin ko lanes mein set karna
-        const xPos = LANES[Math.floor(Math.random() * 3)];
-        item.position.set(xPos, 1.5, zPos);
-        
-        if (type === 'coin') item.rotation.x = Math.PI / 2;
-        
-        item.userData = { type: type }; // Pehchan ke liye
-        scene.add(item);
-        items.push(item);
-    }
-}
-
-function checkItemCollections() {
-    items.forEach((item, index) => {
-        // Item ko gol ghumana (Animation)
-        item.rotation.y += 0.05;
-
-        // Player ne item uthaya ya nahi?
-        if (player && player.position.distanceTo(item.position) < 2) {
-            if (item.userData.type === 'coin') {
-                db.coins = (db.coins || 0) + 1;
-                score += 50; // Coin se score badhega
-            } else {
-                sessionGems += 1;
-                db.gems += 1;
-                score += 500; // Gem se score zyada badhega
-            }
-            
-            // HUD update karna
-            document.getElementById('current-gems').innerText = sessionGems;
-            
-            // Item gayab karna
-            scene.remove(item);
-            items.splice(index, 1);
-            saveDB();
-        }
-
-        // Peeche chhoote items ko delete karna
-        if (item.position.z < player.position.z - 20) {
-            scene.remove(item);
-            items.splice(index, 1);
-        }
-    });
-}
-
-// Ab is function ko bhi updatePhysics (Part 10) mein jodh do
-// updatePhysics ke andar checkItemCollections(); likhna hoga.
-
-// --- END OF PART 11 ---
-
-// --- PART 12: THE BRIDGE (Paste after Part 11 inside <script>) ---
-
-// Ye function humne Part 3 mein khali chhoda tha, ab ise poora karte hain
-function startGame() {
-    // 1. UI chhupao aur Game HUD dikhao
-    document.getElementById('home-page').style.display = 'none';
-    document.getElementById('game-hud').style.display = 'flex';
-    document.getElementById('loading-screen').style.display = 'none';
-    
-    // 2. Game ko active karo
-    gameActive = true;
-    
-    // 3. Score aur Gems reset karo is session ke liye
-    score = 0;
-    sessionGems = 0;
-    speed = 1.0;
-    
-    console.log("Mission Started!");
-}
-
-// Ek chota sa fix physics loop ke liye (Jo Part 11 mein reh gaya tha)
-function updatePhysics() {
-    if (!gameActive) return;
-    updatePlayerLane();       // Part 9
-    checkCollisions();        // Part 10
-    checkItemCollections();   // Part 11
-}
-
-// --- END OF PART 12 ---
-
-// --- PART 13: MAP SWITCHER (Paste after Part 12 inside <script>) ---
-
-function updateEnvironment() {
-    if (score > 2000 && db.unlockedMaps.includes('Desert')) {
-        // Desert Theme
-        scene.background = new THREE.Color(0xeedc82);
-        scene.fog.color.set(0xeedc82);
-    } else if (score > 4000) {
-        // Cyber/Night Theme
-        scene.background = new THREE.Color(0x000033);
-        scene.fog.color.set(0x000033);
-    }
-}
-
-// Ise handleMovement (Part 7) ke andar score badhne ke baad call karenge
-// --- END OF PART 13 ---
-// --- REPAIR: CONNECTING EVERYTHING ---
-
-// Ye loop har second chalega aur game ko update karega
-function finalGameLoop() {
-    requestAnimationFrame(finalGameLoop);
-    
-    const delta = clock.getDelta();
-    if (mixer) mixer.update(delta); // Robot ki bhagne wali animation
-
-    if (gameActive) {
-        // 1. Robot ko aage badhao (Part 7)
-        handleMovement(); 
-        
-        // 2. Lane badlo, Takkar check karo, Items uthao (Part 12)
-        updatePhysics(); 
-        
-        // 3. Mausam badlo (Part 13)
-        updateEnvironment(); 
-    }
-
-    // Camera follow logic
-    if (player) {
-        camera.position.lerp(new THREE.Vector3(player.position.x * 0.5, 7, player.position.z - 12), 0.1);
+function loop() {
+    requestAnimationFrame(loop);
+    const dt = clock.getDelta();
+    if(mixer) mixer.update(dt);
+    updateGame();
+    if(player) {
+        camera.position.set(player.position.x * 0.5, 7, player.position.z - 12);
         camera.lookAt(player.position.x, 2, player.position.z + 10);
     }
-
     renderer.render(scene, camera);
 }
 
-// Ye line sabse zaruri hai: Loop ko chalu karna
-finalGameLoop();
-
-// Start Button ko dobara check karein
-document.querySelector('button[onclick="startGame()"]').onclick = function() {
-    startGame();
-};
-    
-
-
-    
+initBase();
+for(let i=0; i<15; i++) createRoadTile(i*30);
+loadPlayer();
+handleControls();
+document.getElementById('best-score').innerText = db.best;
+document.getElementById('total-gems').innerText = db.gems;
+loop();
+</script>
+</body>
+</html>
 
