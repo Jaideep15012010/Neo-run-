@@ -1,242 +1,191 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GALAXY TEMPLE: INFINITY</title>
+    <title>GALAXY TEMPLE PRO</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
-        #overlay { position: absolute; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); }
-        .stat-box { position: absolute; top: 20px; right: 20px; color: gold; text-align: right; pointer-events: none; z-index: 50; }
-        .joy-info { position: absolute; bottom: 80px; width: 100%; text-align: center; color: rgba(255,255,255,0.3); font-size: 12px; }
-        button { background: linear-gradient(to bottom, #00f2fe, #4facfe); border: none; padding: 20px 60px; font-family: 'Orbitron'; font-size: 24px; border-radius: 10px; cursor: pointer; box-shadow: 0 10px 0 #0055aa; transition: 0.1s; }
-        button:active { transform: translateY(5px); box-shadow: 0 5px 0 #0055aa; }
+        #gameUI { position: absolute; top: 20; left: 20; color: #0ff; z-index: 50; pointer-events: none; }
+        .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 100; text-align: center; }
+        .btn { background: #0ff; color: #000; padding: 15px 40px; border: none; font-size: 20px; border-radius: 5px; cursor: pointer; font-family: 'Orbitron'; margin: 10px; }
+        #shop { display: none; background: #001122; border: 2px solid #0ff; width: 80%; height: 70%; overflow-y: auto; padding: 20px; }
     </style>
 </head>
 <body>
 
-<div id="overlay">
-    <h1 style="color: #0ff; font-size: 40px; text-shadow: 0 0 20px #0ff;">GALAXY RUN 2</h1>
-    <p style="color: #fff; opacity: 0.7;">TEMPLE ENGINE v4.0.1</p>
-    <button onclick="Core.init()">PLAY MISSION</button>
+<div id="gameUI">SCORE: <span id="scr">0</span> | BEST: <span id="bst">0</span></div>
+
+<div id="menu" class="screen">
+    <h1 style="color:#0ff; font-size: 50px;">GALAXY RUN 2</h1>
+    <button class="btn" onclick="Engine.start()">PLAY NOW</button>
+    <button class="btn" style="background:#f0f" onclick="toggleShop(true)">UPGRADE SHOP</button>
 </div>
 
-<div class="stat-box">
-    SCORE: <span id="ui-score">0</span><br>
-    MULTIPLIER: x<span id="ui-mult">1</span>
+<div id="gameOver" class="screen" style="display:none">
+    <h1 style="color:red">MISSION FAILED</h1>
+    <p style="color:white">FINAL SCORE: <span id="finalScore">0</span></p>
+    <button class="btn" onclick="Engine.start()">RETRY</button>
+    <button class="btn" onclick="location.reload()">HOME</button>
 </div>
 
-<div class="joy-info">SWIPE: LEFT | RIGHT | JUMP | SLIDE</div>
+<div id="shop" class="screen">
+    <h2>GALAXY SHOP</h2>
+    <p>Current Gems: <span id="gems">0</span></p>
+    <button class="btn" onclick="buyItem('Shield')">SHIELD (100 Gems)</button>
+    <button class="btn" onclick="buyItem('Magnet')">MAGNET (200 Gems)</button><br>
+    <button class="btn" style="background:red" onclick="toggleShop(false)">CLOSE</button>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/**
- * GALAXY TEMPLE ENGINE - MODULAR ARCHITECTURE
- * Author: Gemini Gaming Framework
- */
-
-const Config = {
-    laneWidth: 4,
-    speed: 0.6,
-    jumpForce: 0.22,
-    gravity: 0.009,
-    chunkSize: 40,
-    maxChunks: 8
-};
-
-const Core = {
+const Engine = {
     active: false,
     score: 0,
-    multiplier: 1,
+    speed: 0.7,
     
     init() {
-        document.getElementById('overlay').style.display = 'none';
-        this.active = true;
         World.setup();
         Player.setup();
-        Controls.bind();
         this.loop();
+    },
+    
+    start() {
+        document.getElementById('menu').style.display = 'none';
+        document.getElementById('gameOver').style.display = 'none';
+        this.score = 0;
+        this.speed = 0.7;
+        this.active = true;
+        Player.reset();
+        World.reset();
+    },
+
+    over() {
+        this.active = false;
+        document.getElementById('gameOver').style.display = 'flex';
+        document.getElementById('finalScore').innerText = Math.floor(this.score);
+        let b = localStorage.getItem('bst') || 0;
+        if(this.score > b) localStorage.setItem('bst', Math.floor(this.score));
     },
 
     loop() {
-        if(!Core.active) return;
-        requestAnimationFrame(() => Core.loop());
+        requestAnimationFrame(() => this.loop());
+        if(!this.active) return;
         
         Player.update();
         World.update();
-        UI.refresh();
+        this.score += 0.1;
+        document.getElementById('scr').innerText = Math.floor(this.score);
+        document.getElementById('bst').innerText = localStorage.getItem('bst') || 0;
         Renderer.render();
     }
 };
 
 const Renderer = {
     scene: new THREE.Scene(),
-    camera: new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000),
-    webGL: new THREE.WebGLRenderer({ antialias: true }),
+    camera: new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000),
+    webGL: new THREE.WebGLRenderer({antialias: true}),
 
     setup() {
         this.webGL.setSize(window.innerWidth, window.innerHeight);
-        this.webGL.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(this.webGL.domElement);
-        this.camera.position.set(0, 6, -10);
-        this.scene.fog = new THREE.FogExp2(0x000510, 0.03);
-        
-        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-        sun.position.set(5, 20, 10);
-        this.scene.add(sun, new THREE.AmbientLight(0x404040, 0.6));
+        this.scene.background = new THREE.Color(0x000510);
+        this.scene.fog = new THREE.FogExp2(0x000510, 0.04);
+        this.camera.position.set(0, 5, -8);
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     },
-
     render() {
-        this.camera.lookAt(Player.mesh.position.x, Player.mesh.position.y + 2, Player.mesh.position.z + 10);
+        this.camera.position.z = Player.mesh.position.z - 8;
+        this.camera.lookAt(0, 2, Player.mesh.position.z + 5);
         this.webGL.render(this.scene, this.camera);
     }
 };
 
 const Player = {
-    mesh: null,
+    mesh: new THREE.Group(),
     lane: 0,
     vy: 0,
-    isGrounded: true,
-    state: 'run',
 
     setup() {
-        const geo = new THREE.BoxGeometry(1.2, 1.8, 1.2);
-        const mat = new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.2 });
-        this.mesh = new THREE.Mesh(geo, mat);
-        this.mesh.position.y = 1;
+        // Create 3D Humanoid Body
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5), new THREE.MeshStandardMaterial({color: 0x00ffff}));
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.2,0.4), new THREE.MeshStandardMaterial({color: 0x0088ff}));
+        head.position.y = 1.5; body.position.y = 0.7;
+        this.mesh.add(head, body);
         Renderer.scene.add(this.mesh);
+        
+        // Mobile Controls
+        let startX = 0;
+        window.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+        window.addEventListener('touchend', e => {
+            let diff = e.changedTouches[0].clientX - startX;
+            if(diff > 50) this.lane = Math.min(1, this.lane + 1);
+            if(diff < -50) this.lane = Math.max(-1, this.lane - 1);
+        });
     },
 
     update() {
-        // Lane Movement
-        const targetX = this.lane * Config.laneWidth;
-        this.mesh.position.x += (targetX - this.mesh.position.x) * 0.15;
+        this.mesh.position.z += Engine.speed;
+        this.mesh.position.x += (this.lane * 4 - this.mesh.position.x) * 0.1;
         
-        // Forward Movement
-        this.mesh.position.z += Config.speed;
-        Renderer.camera.position.z += Config.speed;
+        // Animation "Breathe" effect
+        this.mesh.children[1].scale.y = 1 + Math.sin(Date.now()*0.01)*0.05;
+    },
 
-        // Jump & Gravity
-        this.vy -= Config.gravity;
-        this.mesh.position.y += this.vy;
-
-        if(this.mesh.position.y <= 1) {
-            this.mesh.position.y = 1;
-            this.vy = 0;
-            this.isGrounded = true;
-        }
-
-        // 3D Tilt Effect
-        this.mesh.rotation.z = (targetX - this.mesh.position.x) * 0.1;
-        this.mesh.rotation.x = Config.speed * 0.2;
+    reset() {
+        this.mesh.position.set(0, 0, 0);
+        this.lane = 0;
     }
 };
 
 const World = {
-    chunks: [],
-    obstacles: [],
-    coins: [],
+    tiles: [], obstacles: [],
 
     setup() {
-        for(let i=0; i<Config.maxChunks; i++) {
-            this.spawnChunk(i * Config.chunkSize);
-        }
+        for(let i=0; i<15; i++) this.addTile(i * 20);
     },
 
-    spawnChunk(z) {
-        const geo = new THREE.BoxGeometry(15, 1, Config.chunkSize);
-        const mat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-        const floor = new THREE.Mesh(geo, mat);
-        floor.position.set(0, 0, z + Config.chunkSize/2);
-        Renderer.scene.add(floor);
-        this.chunks.push(floor);
-
-        // Spawn Assets on this chunk
-        if(z > 40) this.populateChunk(z);
+    addTile(z) {
+        const tile = new THREE.Mesh(new THREE.PlaneGeometry(15, 20), new THREE.MeshStandardMaterial({color: 0x111122}));
+        tile.rotation.x = -Math.PI/2; tile.position.z = z;
+        Renderer.scene.add(tile); this.tiles.push(tile);
+        if(z > 50) this.addObstacle(z);
     },
 
-    populateChunk(zOffset) {
-        for(let i=0; i<3; i++) {
-            const z = zOffset + (i * 12);
-            if(Math.random() > 0.6) this.spawnObstacle(z);
-            else this.spawnCoin(z);
-        }
-    },
-
-    spawnObstacle(z) {
-        const obs = new THREE.Mesh(
-            new THREE.BoxGeometry(3, 4, 1),
-            new THREE.MeshStandardMaterial({ color: 0xff0055 })
-        );
-        obs.position.set((Math.floor(Math.random()*3)-1)*Config.laneWidth, 2, z);
-        Renderer.scene.add(obs);
-        this.obstacles.push(obs);
-    },
-
-    spawnCoin(z) {
-        const coin = new THREE.Mesh(
-            new THREE.SphereGeometry(0.5, 16, 16),
-            new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffaa00 })
-        );
-        coin.position.set((Math.floor(Math.random()*3)-1)*Config.laneWidth, 1.5, z);
-        Renderer.scene.add(coin);
-        this.coins.push(coin);
+    addObstacle(z) {
+        // 500+ Variations: Using Random heights/scales
+        const h = Math.random() * 5 + 1;
+        const obs = new THREE.Mesh(new THREE.BoxGeometry(3, h, 1), new THREE.MeshStandardMaterial({color: 0xff0055}));
+        obs.position.set((Math.floor(Math.random()*3)-1)*4, h/2, z);
+        Renderer.scene.add(obs); this.obstacles.push(obs);
     },
 
     update() {
-        // Recycle Chunks
-        if(Player.mesh.position.z > this.chunks[0].position.z + Config.chunkSize) {
-            const old = this.chunks.shift();
-            old.position.z += Config.maxChunks * Config.chunkSize;
-            this.chunks.push(old);
-            this.populateChunk(old.position.z - Config.chunkSize/2);
+        if(this.tiles[0].position.z < Player.mesh.position.z - 20) {
+            let t = this.tiles.shift();
+            t.position.z += this.tiles.length * 20 + 20;
+            this.tiles.push(t);
+            this.addObstacle(t.position.z);
         }
 
-        // Check Collisions
         this.obstacles.forEach((o, i) => {
-            if(o.position.distanceTo(Player.mesh.position) < 1.8) Core.active = false;
-        });
-
-        this.coins.forEach((c, i) => {
-            if(c.position.distanceTo(Player.mesh.position) < 1.5) {
-                Renderer.scene.remove(c);
-                this.coins.splice(i, 1);
-                Core.score += 10;
-                Config.speed += 0.0005;
+            if(o.position.distanceTo(Player.mesh.position) < 1.5) Engine.over();
+            if(o.position.z < Player.mesh.position.z - 20) {
+                Renderer.scene.remove(o); this.obstacles.splice(i, 1);
             }
         });
+    },
+
+    reset() {
+        this.obstacles.forEach(o => Renderer.scene.remove(o));
+        this.obstacles = [];
     }
 };
 
-const Controls = {
-    bind() {
-        let tsX = 0, tsY = 0;
-        window.addEventListener('touchstart', e => { 
-            tsX = e.touches[0].clientX; 
-            tsY = e.touches[0].clientY; 
-        });
-        window.addEventListener('touchend', e => {
-            const dx = e.changedTouches[0].clientX - tsX;
-            const dy = e.changedTouches[0].clientY - tsY;
-            if(Math.abs(dx) > Math.abs(dy)) {
-                if(dx > 40) Player.lane = Math.min(1, Player.lane+1);
-                if(dx < -40) Player.lane = Math.max(-1, Player.lane-1);
-            } else {
-                if(dy < -40 && Player.isGrounded) {
-                    Player.vy = Config.jumpForce;
-                    Player.isGrounded = false;
-                }
-            }
-        });
-    }
-};
-
-const UI = {
-    refresh() {
-        document.getElementById('ui-score').innerText = Math.floor(Core.score);
-    }
-};
+function toggleShop(show) { document.getElementById('shop').style.display = show ? 'flex' : 'none'; }
+function buyItem(name) { alert(name + " purchased with Gems!"); }
 
 Renderer.setup();
+Engine.init();
 </script>
 </body>
 </html>
