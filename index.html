@@ -1,147 +1,136 @@
+<!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Galaxy Overlord: Business Edition</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; color: #fff; }
-        .ui-panel { position: absolute; padding: 10px; background: rgba(0,0,0,0.7); border: 1px solid #0ff; border-radius: 5px; z-index: 100; }
-        .btn { background: #0ff; color: #000; border: none; padding: 5px 10px; font-weight: bold; cursor: pointer; margin: 5px; }
-        #shopMenu, #missionMenu { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; background: #001122; border: 2px solid #0ff; padding: 20px; z-index: 200; text-align: center; }
-        .ad-space { position: absolute; bottom: 0; width: 100%; height: 50px; background: #222; text-align: center; line-height: 50px; color: #555; font-size: 12px; }
-    </style>
+<meta charset="UTF-8">
+<title>3D Endless Runner</title>
+<style>
+  body { margin: 0; overflow: hidden; background:#111; }
+  canvas { display:block; }
+</style>
 </head>
 <body>
-
-<div class="ui-panel" style="top:10; left:10;">
-    LEVEL: <span id="lvl">1</span> | COINS: <span id="scr">0</span> | GEMS: <span id="gms">0</span>
-    <br><button class="btn" onclick="toggleMenu('shopMenu')">SHOP</button>
-    <button class="btn" onclick="toggleMenu('missionMenu')">MISSIONS</button>
-</div>
-
-<div class="ad-space" id="adBanner">--- ADVERTISEMENT SPACE ---</div>
-
-<div id="shopMenu">
-    <h2>GALAXY SHOP</h2>
-    <p>Buy Gems: <button class="btn" onclick="buyGems()">100 GEMS = ₹10</button></p>
-    <hr>
-    <p>New Ship: <button class="btn" onclick="buyShip('Neon', 50)">Neon Ship (50 Gems)</button></p>
-    <button class="btn" style="background:red" onclick="toggleMenu('shopMenu')">CLOSE</button>
-</div>
-
-<div id="missionMenu">
-    <h2>MISSIONS</h2>
-    <div id="missionList">1. Kill 50 Enemies (+20 Gems)<br>2. Reach Level 5 (+50 Gems)</div>
-    <br><button class="btn" style="background:red" onclick="toggleMenu('missionMenu')">CLOSE</button>
-</div>
-
-<canvas id="gameCanvas"></canvas>
-
+<script src="https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.min.js"></script>
 <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 50;
 
-    let score = parseInt(localStorage.getItem('galaxyScore')) || 0;
-    let level = parseInt(localStorage.getItem('galaxyLevel')) || 1;
-    let gems = parseInt(localStorage.getItem('galaxyGems')) || 0;
-    let kills = 0, active = true;
+// SCENE SETUP
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
 
-    let player = { x: canvas.width/2, y: canvas.height-100, color: '#0ff' };
-    let bullets = [], enemyBullets = [], enemies = [], stars = [];
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0, 6, -10);
+camera.lookAt(0,0,0);
 
-    for(let i=0; i<80; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2});
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-    function toggleMenu(id) {
-        let m = document.getElementById(id);
-        m.style.display = (m.style.display === 'block') ? 'none' : 'block';
-        active = (m.style.display !== 'block');
+// LIGHT
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(0, 20, 10);
+scene.add(light);
+
+// Lanes
+const lanes = [-3,0,3];
+let currentLane = 1;
+
+// PLAYER
+const playerGeo = new THREE.BoxGeometry(1,1,1);
+const playerMat = new THREE.MeshStandardMaterial({color:0x00ffff});
+const player = new THREE.Mesh(playerGeo, playerMat);
+player.position.set(lanes[currentLane],0.5,0);
+scene.add(player);
+
+// GROUND
+const groundGeo = new THREE.BoxGeometry(10,1,100);
+const groundMat = new THREE.MeshStandardMaterial({color:0x555555});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.position.z = 50;
+scene.add(ground);
+
+// OBSTACLES
+let obstacles = [];
+function spawnObstacle(){
+  const geo = new THREE.BoxGeometry(1,1,1);
+  const mat = new THREE.MeshStandardMaterial({color:0xff0000});
+  const obs = new THREE.Mesh(geo, mat);
+  const lane = lanes[Math.floor(Math.random()*3)];
+  obs.position.set(lane,0.5, camera.position.z + 50);
+  scene.add(obs);
+  obstacles.push(obs);
+}
+setInterval(spawnObstacle, 1500);
+
+// ORBS
+let orbs = [];
+function spawnOrb(){
+  const geo = new THREE.SphereGeometry(0.5,16,16);
+  const mat = new THREE.MeshStandardMaterial({color:0x00ff00});
+  const orb = new THREE.Mesh(geo, mat);
+  const lane = lanes[Math.floor(Math.random()*3)];
+  orb.position.set(lane,0.5, camera.position.z + 60);
+  scene.add(orb);
+  orbs.push(orb);
+}
+setInterval(spawnOrb, 1000);
+
+// PLAYER MOVEMENT
+let vy = 0;
+let grounded = true;
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft') currentLane = Math.max(0, currentLane-1);
+  if(e.key==='ArrowRight') currentLane = Math.min(2, currentLane+1);
+  if(e.key==='ArrowUp' && grounded){ vy = 0.2; grounded=false; }
+});
+
+// GAME LOOP
+let speed = 0.3;
+let score = 0;
+let health = 3;
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  // move player smoothly
+  player.position.x += (lanes[currentLane] - player.position.x) * 0.2;
+
+  // jump
+  vy -= 0.01;
+  player.position.y += vy;
+  if(player.position.y <= 0.5){ player.position.y=0.5; vy=0; grounded=true; }
+
+  // move obstacles
+  obstacles.forEach((o,i)=>{
+    o.position.z -= speed;
+    // collision
+    if(Math.abs(o.position.x - player.position.x)<1 && Math.abs(o.position.y - player.position.y)<1 && Math.abs(o.position.z)<1){
+      scene.remove(o);
+      obstacles.splice(i,1);
+      health--;
+      if(health<=0){ alert("GAME OVER! Score: "+score); window.location.reload(); }
     }
+    if(o.position.z < camera.position.z - 10){ scene.remove(o); obstacles.splice(i,1); }
+  });
 
-    function buyGems() {
-        alert("Redirecting to Payment Gateway... (Simulation)");
-        gems += 100; updateUI();
+  // move orbs
+  orbs.forEach((orb,i)=>{
+    orb.position.z -= speed;
+    if(Math.abs(orb.position.x - player.position.x)<1 && Math.abs(orb.position.y - player.position.y)<1 && Math.abs(orb.position.z)<1){
+      scene.remove(orb); orbs.splice(i,1); score+=10; speed+=0.001;
     }
+    if(orb.position.z < camera.position.z - 10){ scene.remove(orb); orbs.splice(i,1); }
+  });
 
-    function buyShip(name, cost) {
-        if(gems >= cost) { gems -= cost; player.color = '#ff00ff'; alert(name + " Purchased!"); updateUI(); }
-        else { alert("Not enough Gems!"); }
-    }
+  // move camera forward
+  camera.position.z += speed;
+  camera.lookAt(player.position.x,player.position.y,player.position.z+5);
 
-    function updateUI() {
-        document.getElementById('scr').innerText = score;
-        document.getElementById('lvl').innerText = level;
-        document.getElementById('gms').innerText = gems;
-        localStorage.setItem('galaxyGems', gems);
-    }
+  renderer.render(scene, camera);
 
-    window.addEventListener('touchmove', e => { if(active) player.x = e.touches[0].clientX; });
+  // display score
+  document.title = "Score: "+score+" Health: "+health;
+}
+animate();
 
-    function spawnEnemy() {
-        if(!active || enemies.length > 5) return;
-        enemies.push({ 
-            x: Math.random()*canvas.width, 
-            y: Math.random()*200 + 50, 
-            vx: (Math.random()-0.5)*4, 
-            vy: (Math.random()-0.5)*2,
-            hp: 2, lastShot: 0
-        });
-    }
-    setInterval(spawnEnemy, 2000);
-
-    function gameLoop() {
-        if(!active) { requestAnimationFrame(gameLoop); return; }
-        ctx.fillStyle = '#000814'; ctx.fillRect(0,0,canvas.width,canvas.height);
-
-        stars.forEach(st => { st.y += st.s; if(st.y > canvas.height) st.y = 0; ctx.fillStyle='white'; ctx.fillRect(st.x,st.y,1,1); });
-
-        // Player
-        ctx.fillStyle = player.color; ctx.beginPath();
-        ctx.moveTo(player.x, player.y-30); ctx.lineTo(player.x-20, player.y+10); ctx.lineTo(player.x+20, player.y+10); ctx.fill();
-
-        // Player Bullets
-        if(Date.now() % 15 === 0) bullets.push({x: player.x, y: player.y-30});
-        bullets.forEach((b,i) => { b.y -= 10; ctx.fillStyle='yellow'; ctx.fillRect(b.x-2, b.y, 4, 10); if(b.y<0) bullets.splice(i,1); });
-
-        // Enemies (Hovering AI)
-        enemies.forEach((en, i) => {
-            en.x += en.vx; en.y += en.vy;
-            if(en.x < 0 || en.x > canvas.width) en.vx *= -1;
-            if(en.y < 50 || en.y > 300) en.vy *= -1;
-
-            ctx.fillStyle = 'red'; ctx.fillRect(en.x-20, en.y-20, 40, 30);
-
-            // Upgraded Enemy Bullets (Targeted)
-            if(Date.now() - en.lastShot > 2000) {
-                enemyBullets.push({x: en.x, y: en.y, vx: (player.x - en.x)/100, vy: 5});
-                en.lastShot = Date.now();
-            }
-
-            bullets.forEach((b, bi) => {
-                if(Math.abs(b.x-en.x)<20 && Math.abs(b.y-en.y)<20) {
-                    en.hp--; bullets.splice(bi, 1);
-                    if(en.hp<=0) { enemies.splice(i,1); score+=10; kills++; checkMissions(); updateUI(); }
-                }
-            });
-        });
-
-        enemyBullets.forEach((eb, i) => {
-            eb.y += eb.vy; eb.x += eb.vx;
-            ctx.fillStyle = '#f0f'; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill();
-            if(Math.abs(eb.x-player.x)<25 && Math.abs(eb.y-player.y)<25) location.reload();
-            if(eb.y > canvas.height) enemyBullets.splice(i,1);
-        });
-
-        requestAnimationFrame(gameLoop);
-    }
-
-    function checkMissions() {
-        if(kills === 50) { gems += 20; alert("Mission Complete: 50 Kills!"); }
-        if(level === 5) { gems += 50; }
-    }
-
-    gameLoop();
 </script>
 </body>
 </html>
