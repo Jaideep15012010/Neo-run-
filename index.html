@@ -1,117 +1,109 @@
-using UnityEngine;
-using UnityEngine.UI;
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Galaxy Shooter Pro</title>
+</head>
+<body style="margin:0; background:#000; overflow:hidden; font-family:sans-serif;">
 
-public class GalaxySkyShooter : MonoBehaviour
-{
-    public GameObject player;
-    public GameObject bulletPrefab;
-    public GameObject enemyPrefab;
-    public Text scoreText;
-    public Text levelText;
+<div style="position:absolute; top:10; left:10; color:#0f0; font-weight:bold; pointer-events:none;">
+    LEVEL: <span id="lvl">1</span> | COINS: <span id="scr">0</span>
+</div>
 
-    int score = 0;
-    int level = 1;
-    float enemySpawnRate = 1.5f;
+<canvas id="gameCanvas"></canvas>
 
-    void Start()
-    {
-        InvokeRepeating("SpawnEnemy", 1f, enemySpawnRate);
-        UpdateUI();
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let score = 0, level = 1, active = true;
+    let player = { x: canvas.width/2, y: canvas.height-100, w: 50, h: 50 };
+    let bullets = [], enemies = [], stars = [];
+
+    // Background Stars
+    for(let i=0; i<60; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2+1});
+
+    // Touch controls
+    window.addEventListener('touchmove', e => {
+        player.x = e.touches[0].clientX;
+        player.y = e.touches[0].clientY - 50;
+    });
+
+    function spawnEnemy() {
+        if(!active) return;
+        enemies.push({ x: Math.random()*(canvas.width-40), y: -50, speed: 3 + level });
+    }
+    let enemyTimer = setInterval(spawnEnemy, 1500);
+
+    function gameLoop() {
+        if(!active) return;
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+
+        // Stars
+        ctx.fillStyle = 'white';
+        stars.forEach(st => {
+            st.y += st.s;
+            if(st.y > canvas.height) st.y = 0;
+            ctx.fillRect(st.x, st.y, 2, 2);
+        });
+
+        // Player (Spaceship)
+        ctx.fillStyle = '#0ff';
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y - 30);
+        ctx.lineTo(player.x - 25, player.y + 20);
+        ctx.lineTo(player.x + 25, player.y + 20);
+        ctx.fill();
+
+        // Bullets (Auto Shoot like your Unity code)
+        if(Math.random() > 0.9) bullets.push({x: player.x, y: player.y - 30});
+        bullets.forEach((b, i) => {
+            b.y -= 10;
+            ctx.fillStyle = 'yellow';
+            ctx.fillRect(b.x-2, b.y, 4, 15);
+            if(b.y < 0) bullets.splice(i, 1);
+        });
+
+        // Enemies
+        enemies.forEach((en, i) => {
+            en.y += en.speed;
+            ctx.fillStyle = 'red';
+            ctx.fillRect(en.x-20, en.y-20, 40, 40);
+
+            // Bullet Hit
+            bullets.forEach((b, bi) => {
+                if(Math.abs(b.x - en.x) < 30 && Math.abs(b.y - en.y) < 30) {
+                    enemies.splice(i, 1);
+                    bullets.splice(bi, 1);
+                    score += 10;
+                    
+                    // Level Up Logic from your Unity code
+                    if(score % 100 === 0) {
+                        level++;
+                        clearInterval(enemyTimer);
+                        enemyTimer = setInterval(spawnEnemy, Math.max(500, 1500 - (level * 200)));
+                    }
+                }
+            });
+
+            // Game Over
+            if(en.y > canvas.height || (Math.abs(en.x - player.x) < 40 && Math.abs(en.y - player.y) < 40)) {
+                active = false;
+                alert("GAME OVER! Coins: " + score);
+                location.reload();
+            }
+        });
+
+        document.getElementById('scr').innerText = score;
+        document.getElementById('lvl').innerText = level;
+        requestAnimationFrame(gameLoop);
     }
 
-    void Update()
-    {
-        MovePlayer();
-        Shoot();
-    }
+    gameLoop();
+</script>
+</body>
+</html>
 
-    void MovePlayer()
-    {
-        float h = Input.GetAxis("Horizontal");
-        float v = Input.GetAxis("Vertical");
 
-        player.transform.Translate(new Vector3(h, v, 0) * 6f * Time.deltaTime);
-
-        Vector3 pos = Camera.main.WorldToViewportPoint(player.transform.position);
-        pos.x = Mathf.Clamp01(pos.x);
-        pos.y = Mathf.Clamp01(pos.y);
-        player.transform.position = Camera.main.ViewportToWorldPoint(pos);
-    }
-
-    void Shoot()
-    {
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            Instantiate(bulletPrefab,
-                player.transform.position + Vector3.up * 0.6f,
-                Quaternion.identity);
-        }
-    }
-
-    void SpawnEnemy()
-    {
-        Vector3 pos = new Vector3(Random.Range(-2.2f, 2.2f), 6f, 0);
-        GameObject enemy = Instantiate(enemyPrefab, pos, Quaternion.identity);
-        enemy.AddComponent<Enemy>();
-    }
-
-    public void AddScore()
-    {
-        score += 10;
-
-        if (score % 100 == 0)
-        {
-            level++;
-            enemySpawnRate = Mathf.Max(0.5f, enemySpawnRate - 0.2f);
-            CancelInvoke();
-            InvokeRepeating("SpawnEnemy", 1f, enemySpawnRate);
-        }
-
-        UpdateUI();
-    }
-
-    void UpdateUI()
-    {
-        scoreText.text = "Coins: " + score;
-        levelText.text = "Level: " + level;
-    }
-}
-
-public class Bullet : MonoBehaviour
-{
-    void Update()
-    {
-        transform.Translate(Vector3.up * 10f * Time.deltaTime);
-        Destroy(gameObject, 3f);
-    }
-
-    void OnTriggerEnter2D(Collider2D col)
-    {
-        if (col.CompareTag("Enemy"))
-        {
-            Destroy(col.gameObject);
-            FindObjectOfType<GalaxySkyShooter>().AddScore();
-            Destroy(gameObject);
-        }
-    }
-}
-
-public class Enemy : MonoBehaviour
-{
-    void Update()
-    {
-        transform.Translate(Vector3.down * 2.5f * Time.deltaTime);
-        if (transform.position.y < -6)
-            Destroy(gameObject);
-    }
-
-    void OnTriggerEnter2D(Collider2D col)
-    {
-        if (col.CompareTag("Player"))
-        {
-            Time.timeScale = 0;
-            Debug.Log("GAME OVER");
-        }
-    }
-}
-            
