@@ -546,7 +546,43 @@ function updateEnvironment() {
 
 // Ise handleMovement (Part 7) ke andar score badhne ke baad call karenge
 // --- END OF PART 13 ---
+// --- REPAIR: CONNECTING EVERYTHING ---
 
+// Ye loop har second chalega aur game ko update karega
+function finalGameLoop() {
+    requestAnimationFrame(finalGameLoop);
+    
+    const delta = clock.getDelta();
+    if (mixer) mixer.update(delta); // Robot ki bhagne wali animation
+
+    if (gameActive) {
+        // 1. Robot ko aage badhao (Part 7)
+        handleMovement(); 
+        
+        // 2. Lane badlo, Takkar check karo, Items uthao (Part 12)
+        updatePhysics(); 
+        
+        // 3. Mausam badlo (Part 13)
+        updateEnvironment(); 
+    }
+
+    // Camera follow logic
+    if (player) {
+        camera.position.lerp(new THREE.Vector3(player.position.x * 0.5, 7, player.position.z - 12), 0.1);
+        camera.lookAt(player.position.x, 2, player.position.z + 10);
+    }
+
+    renderer.render(scene, camera);
+}
+
+// Ye line sabse zaruri hai: Loop ko chalu karna
+finalGameLoop();
+
+// Start Button ko dobara check karein
+document.querySelector('button[onclick="startGame()"]').onclick = function() {
+    startGame();
+};
+    
 
 
     
