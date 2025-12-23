@@ -1,113 +1,67 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Runner Pro</title>
-    <style>
-        body { margin: 0; background: #111; color: white; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        canvas { background: #222; border: 4px solid #00ffcc; box-shadow: 0 0 20px #00ffcc; border-radius: 10px; cursor: pointer; }
-        .stats { font-size: 20px; margin-bottom: 10px; }
-    </style>
-</head>
-<body>
-    <div class="stats">Score: <span id="score">0</span> | High Score: <span id="highScore">0</span></div>
-    <canvas id="gameCanvas"></canvas>
-    <p>Tap or Press SPACE to Jump</p>
+<style>
+    body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+    canvas { display: block; touch-action: none; background: radial-gradient(circle, #1a1a2e 0%, #000 100%); }
+    #ui { position: absolute; top: 10px; left: 10px; color: #00d4ff; pointer-events: none; text-shadow: 0 0 10px #00d4ff; }
+    .level-text { font-size: 24px; color: #ff00ff; }
+    #msg { position: absolute; top: 50%; width: 100%; text-align: center; color: #fff; font-size: 30px; display: none; }
+</style>
 
-    <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const scoreEl = document.getElementById("score");
-        const highScoreEl = document.getElementById("highScore");
+<div id="ui">
+    <div class="level-text">LEVEL: <span id="lvl">1</span></div>
+    <div>SCORE: <span id="scr">0</span> | COINS: <span id="cns">0</span></div>
+    <div style="color: #ffcc00;">GEMS: <span id="gms">0</span></div>
+</div>
+<div id="msg">LEVEL UP!</div>
 
-        canvas.width = 800;
-        canvas.height = 300;
+<canvas id="game"></canvas>
 
-        let score = 0;
-        let highScore = localStorage.getItem("highScore") || 0;
-        highScoreEl.innerText = highScore;
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-        let gameSpeed = 5;
-        let isGameOver = false;
+    let score = 0, coins = 0, gems = 0, level = 1, active = true;
+    let stars = [], enemies = [], bullets = [], items = [];
 
-        let player = { x: 50, y: 230, w: 40, h: 40, dy: 0, jumpPower: -12, gravity: 0.6, grounded: false };
-        let obstacles = [];
+    // Background Stars
+    for(let i=0; i<100; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*3});
 
-        function spawnObstacle() {
-            let height = Math.random() * (60 - 20) + 20;
-            obstacles.push({ x: canvas.width, y: canvas.height - height, w: 25, h: height });
-        }
+    let p = { x: canvas.width/2, y: canvas.height-100, w: 50, h: 50 };
 
-        function update() {
-            if (isGameOver) return;
+    window.addEventListener('touchmove', e => {
+        p.x = e.touches[0].clientX;
+        p.y = e.touches[0].clientY - 50;
+    });
 
-            // Background clean
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function spawn() {
+        if(!active) return;
+        enemies.push({ x: Math.random()*canvas.width, y: -50, hp: level, s: 2 + level });
+    }
 
-            // Player Logic
-            player.dy += player.gravity;
-            player.y += player.dy;
-            if (player.y + player.h > canvas.height) {
-                player.y = canvas.height - player.h;
-                player.grounded = true;
-            }
+    function loop() {
+        if(!active) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Player (Neon Style)
-            ctx.fillStyle = "#00ffcc";
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = "#00ffcc";
-            ctx.fillRect(player.x, player.y, player.w, player.h);
+        // Draw Stars
+        ctx.fillStyle = "white";
+        stars.forEach(st => {
+            st.y += st.s + (level * 0.5);
+            if(st.y > canvas.height) st.y = 0;
+            ctx.fillRect(st.x, st.y, 2, 2);
+        });
 
-            // Obstacles Logic
-            if (Math.random() < 0.015) spawnObstacle();
+        // Draw Player (Spaceship)
+        ctx.fillStyle = "#00d4ff";
+        ctx.shadowBlur = 20; ctx.shadowColor = "#00d4ff";
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y-25);
+        ctx.lineTo(p.x-25, p.y+25);
+        ctx.lineTo(p.x+25, p.y+25);
+        ctx.fill();
 
-            obstacles.forEach((obs, i) => {
-                obs.x -= gameSpeed;
-                ctx.fillStyle = "#ff0055";
-                ctx.shadowColor = "#ff0055";
-                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+        // Shooting
+        if(Math.random() > 0.9) bullets.push({x: p.x, y: p.y-25});
+        bullets
 
-                // Collision Detection
-                if (player.x < obs.x + obs.w && player.x + player.w > obs.x && player.y < obs.y + obs.h && player.y + player.h > obs.y) {
-                    gameOver();
-                }
-
-                // Remove off-screen obstacles & increase score
-                if (obs.x + obs.w < 0) {
-                    obstacles.splice(i, 1);
-                    score++;
-                    scoreEl.innerText = score;
-                    if(score % 5 === 0) gameSpeed += 0.2; // Speed badhti jayegi (Addictive!)
-                }
-            });
-
-            requestAnimationFrame(update);
-        }
-
-        function gameOver() {
-            isGameOver = true;
-            if (score > highScore) {
-                localStorage.setItem("highScore", score);
-                highScore = score;
-            }
-            alert("Game Over! Score: " + score + "\nRestarting...");
-            location.reload();
-        }
-
-        function jump() {
-            if (player.grounded) {
-                player.dy = player.jumpPower;
-                player.grounded = false;
-            }
-        }
-
-        window.addEventListener("keydown", (e) => { if (e.code === "Space") jump(); });
-        canvas.addEventListener("touchstart", jump);
-        canvas.addEventListener("click", jump);
-
-        update();
-    </script>
-</body>
-</html>
 
