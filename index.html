@@ -1,98 +1,117 @@
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Galaxy Shooter</title>
-</head>
-<body style="margin:0; background:#000; overflow:hidden;">
+using UnityEngine;
+using UnityEngine.UI;
 
-<div style="position:absolute; top:10; left:10; color:#0f0; font-family:sans-serif; pointer-events:none;">
-    LEVEL: <span id="l">1</span> | SCORE: <span id="s">0</span>
-</div>
+public class GalaxySkyShooter : MonoBehaviour
+{
+    public GameObject player;
+    public GameObject bulletPrefab;
+    public GameObject enemyPrefab;
+    public Text scoreText;
+    public Text levelText;
 
-<canvas id="g"></canvas>
+    int score = 0;
+    int level = 1;
+    float enemySpawnRate = 1.5f;
 
-<script>
-    const c = document.getElementById('g');
-    const x = c.getContext('2d');
-    c.width = window.innerWidth;
-    c.height = window.innerHeight;
-
-    let score=0, level=1, player={x:c.width/2, y:c.height-100}, stars=[], enemies=[], bullets=[];
-
-    // Stars background
-    for(let i=0; i<50; i++) stars.push({x:Math.random()*c.width, y:Math.random()*c.height, s:Math.random()*2+1});
-
-    // Control
-    window.addEventListener('touchmove', e => {
-        player.x = e.touches[0].clientX;
-        player.y = e.touches[0].clientY - 50;
-    });
-
-    function spawn() {
-        enemies.push({x:Math.random()*c.width, y:-50, s:3+level, hp:level});
-    }
-    setInterval(spawn, 1000);
-
-    function draw() {
-        x.fillStyle='black';
-        x.fillRect(0,0,c.width,c.height);
-
-        // Stars
-        x.fillStyle='white';
-        stars.forEach(st => {
-            st.y += st.s + level;
-            if(st.y > c.height) st.y = 0;
-            x.fillRect(st.x, st.y, 2, 2);
-        });
-
-        // Player (Spaceship)
-        x.fillStyle='#0ff';
-        x.beginPath();
-        x.moveTo(player.x, player.y-30);
-        x.lineTo(player.x-25, player.y+20);
-        x.lineTo(player.x+25, player.y+20);
-        x.fill();
-
-        // Bullets
-        if(Math.random()>0.9) bullets.push({x:player.x, y:player.y-30});
-        bullets.forEach((b,i) => {
-            b.y -= 10;
-            x.fillStyle='yellow';
-            x.fillRect(b.x-2, b.y, 4, 12);
-            if(b.y < 0) bullets.splice(i,1);
-        });
-
-        // Enemies
-        enemies.forEach((en,i) => {
-            en.y += en.s;
-            x.fillStyle='red';
-            x.fillRect(en.x-20, en.y-20, 40, 40);
-
-            bullets.forEach((b,bi) => {
-                if(Math.abs(b.x-en.x)<30 && Math.abs(b.y-en.y)<30){
-                    en.hp--;
-                    bullets.splice(bi,1);
-                    if(en.hp<=0){
-                        enemies.splice(i,1);
-                        score+=10;
-                        if(score%100==0) level++;
-                    }
-                }
-            });
-
-            if(en.y > c.height || (Math.abs(en.x-player.x)<35 && Math.abs(en.y-player.y)<35)){
-                alert("GAME OVER! Score: " + score);
-                location.reload();
-            }
-        });
-
-        document.getElementById('s').innerText = score;
-        document.getElementById('l').innerText = level;
-        requestAnimationFrame(draw);
+    void Start()
+    {
+        InvokeRepeating("SpawnEnemy", 1f, enemySpawnRate);
+        UpdateUI();
     }
 
-    draw(); // Game starts automatically
-</script>
-</body>
-</html>
+    void Update()
+    {
+        MovePlayer();
+        Shoot();
+    }
 
+    void MovePlayer()
+    {
+        float h = Input.GetAxis("Horizontal");
+        float v = Input.GetAxis("Vertical");
+
+        player.transform.Translate(new Vector3(h, v, 0) * 6f * Time.deltaTime);
+
+        Vector3 pos = Camera.main.WorldToViewportPoint(player.transform.position);
+        pos.x = Mathf.Clamp01(pos.x);
+        pos.y = Mathf.Clamp01(pos.y);
+        player.transform.position = Camera.main.ViewportToWorldPoint(pos);
+    }
+
+    void Shoot()
+    {
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            Instantiate(bulletPrefab,
+                player.transform.position + Vector3.up * 0.6f,
+                Quaternion.identity);
+        }
+    }
+
+    void SpawnEnemy()
+    {
+        Vector3 pos = new Vector3(Random.Range(-2.2f, 2.2f), 6f, 0);
+        GameObject enemy = Instantiate(enemyPrefab, pos, Quaternion.identity);
+        enemy.AddComponent<Enemy>();
+    }
+
+    public void AddScore()
+    {
+        score += 10;
+
+        if (score % 100 == 0)
+        {
+            level++;
+            enemySpawnRate = Mathf.Max(0.5f, enemySpawnRate - 0.2f);
+            CancelInvoke();
+            InvokeRepeating("SpawnEnemy", 1f, enemySpawnRate);
+        }
+
+        UpdateUI();
+    }
+
+    void UpdateUI()
+    {
+        scoreText.text = "Coins: " + score;
+        levelText.text = "Level: " + level;
+    }
+}
+
+public class Bullet : MonoBehaviour
+{
+    void Update()
+    {
+        transform.Translate(Vector3.up * 10f * Time.deltaTime);
+        Destroy(gameObject, 3f);
+    }
+
+    void OnTriggerEnter2D(Collider2D col)
+    {
+        if (col.CompareTag("Enemy"))
+        {
+            Destroy(col.gameObject);
+            FindObjectOfType<GalaxySkyShooter>().AddScore();
+            Destroy(gameObject);
+        }
+    }
+}
+
+public class Enemy : MonoBehaviour
+{
+    void Update()
+    {
+        transform.Translate(Vector3.down * 2.5f * Time.deltaTime);
+        if (transform.position.y < -6)
+            Destroy(gameObject);
+    }
+
+    void OnTriggerEnter2D(Collider2D col)
+    {
+        if (col.CompareTag("Player"))
+        {
+            Time.timeScale = 0;
+            Debug.Log("GAME OVER");
+        }
+    }
+}
+            
