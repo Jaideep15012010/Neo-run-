@@ -1,67 +1,41 @@
-<style>
-    body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
-    canvas { display: block; touch-action: none; background: radial-gradient(circle, #1a1a2e 0%, #000 100%); }
-    #ui { position: absolute; top: 10px; left: 10px; color: #00d4ff; pointer-events: none; text-shadow: 0 0 10px #00d4ff; }
-    .level-text { font-size: 24px; color: #ff00ff; }
-    #msg { position: absolute; top: 50%; width: 100%; text-align: center; color: #fff; font-size: 30px; display: none; }
-</style>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Galaxy Sky Shooter</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0f0; }
+        canvas { display: block; touch-action: none; }
+        #ui { position: absolute; top: 10px; left: 10px; pointer-events: none; font-size: 20px; z-index: 5; }
+        #start { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: #fff; font-size: 25px; text-align: center; z-index: 10; cursor: pointer; }
+    </style>
+</head>
+<body>
 
-<div id="ui">
-    <div class="level-text">LEVEL: <span id="lvl">1</span></div>
-    <div>SCORE: <span id="scr">0</span> | COINS: <span id="cns">0</span></div>
-    <div style="color: #ffcc00;">GEMS: <span id="gms">0</span></div>
-</div>
-<div id="msg">LEVEL UP!</div>
+<div id="ui">LEVEL: <span id="l">1</span> | SCORE: <span id="s">0</span></div>
+<div id="start" onclick="play()">🚀 GALAXY SKY 🚀<br><br>TAP TO START GAME</div>
 
-<canvas id="game"></canvas>
+<canvas id="g"></canvas>
 
 <script>
-    const canvas = document.getElementById('game');
+    const canvas = document.getElementById('g');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    
+    let score=0, level=1, active=false;
+    let player={x:canvas.width/2, y:canvas.height-100};
+    let stars=[], enemies=[], bullets=[];
 
-    let score = 0, coins = 0, gems = 0, level = 1, active = true;
-    let stars = [], enemies = [], bullets = [], items = [];
+    for(let i=0; i<80; i++) stars.push({x:Math.random()*canvas.width, y:Math.random()*canvas.height, s:Math.random()*2+1});
 
-    // Background Stars
-    for(let i=0; i<100; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*3});
-
-    let p = { x: canvas.width/2, y: canvas.height-100, w: 50, h: 50 };
-
-    window.addEventListener('touchmove', e => {
-        p.x = e.touches[0].clientX;
-        p.y = e.touches[0].clientY - 50;
-    });
-
-    function spawn() {
-        if(!active) return;
-        enemies.push({ x: Math.random()*canvas.width, y: -50, hp: level, s: 2 + level });
+    function play() {
+        document.getElementById('start').style.display = 'none';
+        active = true;
+        animate();
     }
 
-    function loop() {
+    window.addEventListener('touchmove', e => { 
         if(!active) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Draw Stars
-        ctx.fillStyle = "white";
-        stars.forEach(st => {
-            st.y += st.s + (level * 0.5);
-            if(st.y > canvas.height) st.y = 0;
-            ctx.fillRect(st.x, st.y, 2, 2);
-        });
-
-        // Draw Player (Spaceship)
-        ctx.fillStyle = "#00d4ff";
-        ctx.shadowBlur = 20; ctx.shadowColor = "#00d4ff";
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y-25);
-        ctx.lineTo(p.x-25, p.y+25);
-        ctx.lineTo(p.x+25, p.y+25);
-        ctx.fill();
-
-        // Shooting
-        if(Math.random() > 0.9) bullets.push({x: p.x, y: p.y-25});
-        bullets
-
-
+        player.x = e.touches[0].clientX; 
+        player.
+            
