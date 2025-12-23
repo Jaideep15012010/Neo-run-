@@ -1,12 +1,13 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Galaxy Shooter Pro</title>
+    <title>Galaxy War: Save Progress</title>
 </head>
 <body style="margin:0; background:#000; overflow:hidden; font-family:sans-serif;">
 
-<div style="position:absolute; top:10; left:10; color:#0f0; font-weight:bold; pointer-events:none;">
-    LEVEL: <span id="lvl">1</span> | COINS: <span id="scr">0</span>
+<div style="position:absolute; top:10; left:10; color:#0ff; font-weight:bold; pointer-events:none; line-height:1.5;">
+    LEVEL: <span id="lvl">1</span> | SCORE: <span id="scr">0</span><br>
+    <span style="color:gold;">BEST: <span id="best">0</span></span>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -17,14 +18,21 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    let score = 0, level = 1, active = true;
-    let player = { x: canvas.width/2, y: canvas.height-100, w: 50, h: 50 };
-    let bullets = [], enemies = [], stars = [];
+    // --- Save Progress Logic ---
+    let score = parseInt(localStorage.getItem('galaxyScore')) || 0;
+    let level = parseInt(localStorage.getItem('galaxyLevel')) || 1;
+    let bestScore = localStorage.getItem('galaxyBest') || 0;
+    let active = true;
 
-    // Background Stars
-    for(let i=0; i<60; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2+1});
+    document.getElementById('scr').innerText = score;
+    document.getElementById('lvl').innerText = level;
+    document.getElementById('best').innerText = bestScore;
 
-    // Touch controls
+    let player = { x: canvas.width/2, y: canvas.height-100 };
+    let bullets = [], enemyBullets = [], enemies = [], stars = [];
+
+    for(let i=0; i<60; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*3+1});
+
     window.addEventListener('touchmove', e => {
         player.x = e.touches[0].clientX;
         player.y = e.touches[0].clientY - 50;
@@ -32,73 +40,91 @@
 
     function spawnEnemy() {
         if(!active) return;
-        enemies.push({ x: Math.random()*(canvas.width-40), y: -50, speed: 3 + level });
+        enemies.push({ 
+            x: Math.random()*(canvas.width-40), 
+            y: -50, 
+            speed: 2 + (level * 0.4), 
+            hp: Math.floor(level/2) + 1
+        });
     }
-    let enemyTimer = setInterval(spawnEnemy, 1500);
+    setInterval(spawnEnemy, 1500 / (1 + level*0.1));
+
+    function drawShip(xPos, yPos, color, isPlayer) {
+        ctx.fillStyle = color;
+        ctx.shadowBlur = 15; ctx.shadowColor = color;
+        ctx.beginPath();
+        if(isPlayer) {
+            ctx.moveTo(xPos, yPos - 30); ctx.lineTo(xPos - 25, yPos + 20); ctx.lineTo(xPos + 25, yPos + 20);
+        } else {
+            ctx.moveTo(xPos, yPos + 30); ctx.lineTo(xPos - 20, yPos - 10); ctx.lineTo(xPos + 20, yPos - 10);
+        }
+        ctx.fill(); ctx.shadowBlur = 0;
+    }
 
     function gameLoop() {
         if(!active) return;
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = 'black'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
         // Stars
         ctx.fillStyle = 'white';
-        stars.forEach(st => {
-            st.y += st.s;
-            if(st.y > canvas.height) st.y = 0;
-            ctx.fillRect(st.x, st.y, 2, 2);
-        });
+        stars.forEach(st => { st.y += st.s; if(st.y > canvas.height) st.y = 0; ctx.fillRect(st.x, st.y, 2, 2); });
 
-        // Player (Spaceship)
-        ctx.fillStyle = '#0ff';
-        ctx.beginPath();
-        ctx.moveTo(player.x, player.y - 30);
-        ctx.lineTo(player.x - 25, player.y + 20);
-        ctx.lineTo(player.x + 25, player.y + 20);
-        ctx.fill();
+        // Player
+        drawShip(player.x, player.y, '#0ff', true);
 
-        // Bullets (Auto Shoot like your Unity code)
+        // Player Bullets
         if(Math.random() > 0.9) bullets.push({x: player.x, y: player.y - 30});
         bullets.forEach((b, i) => {
-            b.y -= 10;
-            ctx.fillStyle = 'yellow';
-            ctx.fillRect(b.x-2, b.y, 4, 15);
+            b.y -= 12; ctx.fillStyle = 'yellow'; ctx.fillRect(b.x-2, b.y, 4, 15);
             if(b.y < 0) bullets.splice(i, 1);
+        });
+
+        // Enemy Bullets
+        enemyBullets.forEach((eb, i) => {
+            eb.y += 6 + level; ctx.fillStyle = '#ff0000'; ctx.fillRect(eb.x-2, eb.y, 4, 12);
+            if(Math.abs(eb.x - player.x) < 25 && Math.abs(eb.y - player.y) < 25) gameOver();
+            if(eb.y > canvas.height) enemyBullets.splice(i, 1);
         });
 
         // Enemies
         enemies.forEach((en, i) => {
             en.y += en.speed;
-            ctx.fillStyle = 'red';
-            ctx.fillRect(en.x-20, en.y-20, 40, 40);
+            drawShip(en.x, en.y, '#f00', false);
 
-            // Bullet Hit
+            if(Math.random() > 0.985) enemyBullets.push({x: en.x, y: en.y + 20});
+
             bullets.forEach((b, bi) => {
-                if(Math.abs(b.x - en.x) < 30 && Math.abs(b.y - en.y) < 30) {
-                    enemies.splice(i, 1);
-                    bullets.splice(bi, 1);
-                    score += 10;
-                    
-                    // Level Up Logic from your Unity code
-                    if(score % 100 === 0) {
-                        level++;
-                        clearInterval(enemyTimer);
-                        enemyTimer = setInterval(spawnEnemy, Math.max(500, 1500 - (level * 200)));
+                if(Math.abs(b.x - en.x) < 25 && Math.abs(b.y - en.y) < 25) {
+                    en.hp--; bullets.splice(bi, 1);
+                    if(en.hp <= 0) {
+                        enemies.splice(i, 1);
+                        score += 10;
+                        // Save score and check level up
+                        localStorage.setItem('galaxyScore', score);
+                        if(score % 100 === 0) {
+                            level++;
+                            localStorage.setItem('galaxyLevel', level);
+                        }
                     }
                 }
             });
 
-            // Game Over
-            if(en.y > canvas.height || (Math.abs(en.x - player.x) < 40 && Math.abs(en.y - player.y) < 40)) {
-                active = false;
-                alert("GAME OVER! Coins: " + score);
-                location.reload();
-            }
+            if(en.y > canvas.height || (Math.abs(en.x - player.x) < 40 && Math.abs(en.y - player.y) < 40)) gameOver();
         });
 
         document.getElementById('scr').innerText = score;
         document.getElementById('lvl').innerText = level;
         requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+        active = false;
+        // Best score check
+        if(score > bestScore) localStorage.setItem('galaxyBest', score);
+        
+        // Ham level reset nahi kar rahe, taaki user wahi se shuru kare
+        alert("GAME OVER! Level " + level + " saved.");
+        location.reload();
     }
 
     gameLoop();
