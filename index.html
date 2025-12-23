@@ -1,12 +1,38 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Galaxy Overlord: 3D Edition</title>
+    <title>Galaxy Overlord: Business Edition</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; color: #fff; }
+        .ui-panel { position: absolute; padding: 10px; background: rgba(0,0,0,0.7); border: 1px solid #0ff; border-radius: 5px; z-index: 100; }
+        .btn { background: #0ff; color: #000; border: none; padding: 5px 10px; font-weight: bold; cursor: pointer; margin: 5px; }
+        #shopMenu, #missionMenu { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; background: #001122; border: 2px solid #0ff; padding: 20px; z-index: 200; text-align: center; }
+        .ad-space { position: absolute; bottom: 0; width: 100%; height: 50px; background: #222; text-align: center; line-height: 50px; color: #555; font-size: 12px; }
+    </style>
 </head>
-<body style="margin:0; background:#000814; overflow:hidden; font-family:'Orbitron', sans-serif;">
+<body>
 
-<div style="position:absolute; top:10; left:10; color:#0ff; font-weight:bold; pointer-events:none; z-index:100; text-shadow:0 0 10px #0ff;">
+<div class="ui-panel" style="top:10; left:10;">
     LEVEL: <span id="lvl">1</span> | COINS: <span id="scr">0</span> | GEMS: <span id="gms">0</span>
+    <br><button class="btn" onclick="toggleMenu('shopMenu')">SHOP</button>
+    <button class="btn" onclick="toggleMenu('missionMenu')">MISSIONS</button>
+</div>
+
+<div class="ad-space" id="adBanner">--- ADVERTISEMENT SPACE ---</div>
+
+<div id="shopMenu">
+    <h2>GALAXY SHOP</h2>
+    <p>Buy Gems: <button class="btn" onclick="buyGems()">100 GEMS = ₹10</button></p>
+    <hr>
+    <p>New Ship: <button class="btn" onclick="buyShip('Neon', 50)">Neon Ship (50 Gems)</button></p>
+    <button class="btn" style="background:red" onclick="toggleMenu('shopMenu')">CLOSE</button>
+</div>
+
+<div id="missionMenu">
+    <h2>MISSIONS</h2>
+    <div id="missionList">1. Kill 50 Enemies (+20 Gems)<br>2. Reach Level 5 (+50 Gems)</div>
+    <br><button class="btn" style="background:red" onclick="toggleMenu('missionMenu')">CLOSE</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -15,142 +41,108 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.height = window.innerHeight - 50;
 
     let score = parseInt(localStorage.getItem('galaxyScore')) || 0;
     let level = parseInt(localStorage.getItem('galaxyLevel')) || 1;
     let gems = parseInt(localStorage.getItem('galaxyGems')) || 0;
-    let active = true, fireRate = 0;
+    let kills = 0, active = true;
 
-    let player = { x: canvas.width/2, y: canvas.height-100, pwr: 0 };
-    let bullets = [], enemyBullets = [], enemies = [], stars = [], powers = [];
+    let player = { x: canvas.width/2, y: canvas.height-100, color: '#0ff' };
+    let bullets = [], enemyBullets = [], enemies = [], stars = [];
 
-    // Starfield Generation
-    for(let i=0; i<120; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*3+0.5, o: Math.random()});
+    for(let i=0; i<80; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2});
 
-    window.addEventListener('touchmove', e => {
-        player.x = e.touches[0].clientX;
-        player.y = e.touches[0].clientY - 50;
-    });
+    function toggleMenu(id) {
+        let m = document.getElementById(id);
+        m.style.display = (m.style.display === 'block') ? 'none' : 'block';
+        active = (m.style.display !== 'block');
+    }
+
+    function buyGems() {
+        alert("Redirecting to Payment Gateway... (Simulation)");
+        gems += 100; updateUI();
+    }
+
+    function buyShip(name, cost) {
+        if(gems >= cost) { gems -= cost; player.color = '#ff00ff'; alert(name + " Purchased!"); updateUI(); }
+        else { alert("Not enough Gems!"); }
+    }
+
+    function updateUI() {
+        document.getElementById('scr').innerText = score;
+        document.getElementById('lvl').innerText = level;
+        document.getElementById('gms').innerText = gems;
+        localStorage.setItem('galaxyGems', gems);
+    }
+
+    window.addEventListener('touchmove', e => { if(active) player.x = e.touches[0].clientX; });
 
     function spawnEnemy() {
-        if(!active) return;
-        let isElite = (level % 4 === 0);
+        if(!active || enemies.length > 5) return;
         enemies.push({ 
-            x: Math.random()*(canvas.width-60)+30, 
-            y: -60, 
-            type: isElite ? "elite" : "normal",
-            hp: isElite ? 5 : 1,
-            speed: isElite ? 1.5 : 2 + (level * 0.3),
-            w: isElite ? 70 : 45,
-            sinDir: Math.random() * Math.PI
+            x: Math.random()*canvas.width, 
+            y: Math.random()*200 + 50, 
+            vx: (Math.random()-0.5)*4, 
+            vy: (Math.random()-0.5)*2,
+            hp: 2, lastShot: 0
         });
     }
-    setInterval(spawnEnemy, 1300 / (1 + level*0.08));
-
-    function draw3DShip(x, y, color, size, isPlayer) {
-        ctx.save();
-        ctx.shadowBlur = 15; ctx.shadowColor = color;
-        
-        // Main Body Gradient for 3D effect
-        let grad = ctx.createLinearGradient(x-size, y, x+size, y);
-        grad.addColorStop(0, '#333');
-        grad.addColorStop(0.5, color);
-        grad.addColorStop(1, '#333');
-        
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        if(isPlayer) {
-            ctx.moveTo(x, y-size); ctx.lineTo(x-size, y+size); ctx.lineTo(x, y+size/2); ctx.lineTo(x+size, y+size);
-        } else {
-            ctx.moveTo(x, y+size); ctx.lineTo(x-size, y-size/2); ctx.lineTo(x, y-size); ctx.lineTo(x+size, y-size/2);
-        }
-        ctx.closePath(); ctx.fill();
-
-        // Cockpit Glow
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.beginPath();
-        ctx.arc(x, isPlayer ? y : y-5, size/4, 0, Math.PI*2);
-        ctx.fill();
-        ctx.restore();
-    }
+    setInterval(spawnEnemy, 2000);
 
     function gameLoop() {
-        if(!active) return;
-        ctx.fillStyle = 'rgba(0, 4, 12, 0.5)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        if(!active) { requestAnimationFrame(gameLoop); return; }
+        ctx.fillStyle = '#000814'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
-        stars.forEach(st => { 
-            st.y += st.s; if(st.y > canvas.height) st.y = 0; 
-            ctx.fillStyle = `rgba(255,255,255,${st.o})`; ctx.fillRect(st.x, st.y, 2, 2); 
-        });
+        stars.forEach(st => { st.y += st.s; if(st.y > canvas.height) st.y = 0; ctx.fillStyle='white'; ctx.fillRect(st.x,st.y,1,1); });
 
-        draw3DShip(player.x, player.y, '#00e5ff', 30, true);
+        // Player
+        ctx.fillStyle = player.color; ctx.beginPath();
+        ctx.moveTo(player.x, player.y-30); ctx.lineTo(player.x-20, player.y+10); ctx.lineTo(player.x+20, player.y+10); ctx.fill();
 
-        // Auto Fire
-        let rateLimit = player.pwr > 0 ? 5 : 12;
-        if(fireRate++ % rateLimit === 0) bullets.push({x: player.x, y: player.y - 30});
-        if(player.pwr > 0) player.pwr--;
+        // Player Bullets
+        if(Date.now() % 15 === 0) bullets.push({x: player.x, y: player.y-30});
+        bullets.forEach((b,i) => { b.y -= 10; ctx.fillStyle='yellow'; ctx.fillRect(b.x-2, b.y, 4, 10); if(b.y<0) bullets.splice(i,1); });
 
-        bullets.forEach((b, i) => {
-            b.y -= 18; ctx.fillStyle = '#fff'; ctx.shadowBlur = 10; ctx.shadowColor = '#0ff';
-            ctx.fillRect(b.x-2, b.y, 4, 18);
-            if(b.y < 0) bullets.splice(i, 1);
-        });
-
-        // Power-ups
-        powers.forEach((p, i) => {
-            p.y += 3; ctx.fillStyle = '#f0f'; ctx.font = 'bold 20px Arial'; ctx.fillText('P', p.x, p.y);
-            if(Math.abs(p.x - player.x) < 40 && Math.abs(p.y - player.y) < 40) { player.pwr = 300; powers.splice(i,1); }
-        });
-
-        // Enemies
+        // Enemies (Hovering AI)
         enemies.forEach((en, i) => {
-            en.y += en.speed;
-            if(en.type === "elite") en.x += Math.sin(en.sinDir += 0.05) * 4;
-            draw3DShip(en.x, en.y, en.type === "elite" ? "#ff0055" : "#ff4400", en.w/2, false);
+            en.x += en.vx; en.y += en.vy;
+            if(en.x < 0 || en.x > canvas.width) en.vx *= -1;
+            if(en.y < 50 || en.y > 300) en.vy *= -1;
 
-            // Crazy Shooting for Elites
-            if(en.type === "elite" && Math.random() > 0.95) {
-                enemyBullets.push({x: en.x, y: en.y, vx: Math.sin(Date.now())*3, vy: 5});
-            } else if(Math.random() > 0.99) {
-                enemyBullets.push({x: en.x, y: en.y, vx: 0, vy: 7});
+            ctx.fillStyle = 'red'; ctx.fillRect(en.x-20, en.y-20, 40, 30);
+
+            // Upgraded Enemy Bullets (Targeted)
+            if(Date.now() - en.lastShot > 2000) {
+                enemyBullets.push({x: en.x, y: en.y, vx: (player.x - en.x)/100, vy: 5});
+                en.lastShot = Date.now();
             }
 
             bullets.forEach((b, bi) => {
-                if(Math.abs(b.x - en.x) < en.w/2 && Math.abs(b.y - en.y) < 30) {
+                if(Math.abs(b.x-en.x)<20 && Math.abs(b.y-en.y)<20) {
                     en.hp--; bullets.splice(bi, 1);
-                    if(en.hp <= 0) {
-                        if(en.type === "elite") powers.push({x: en.x, y: en.y});
-                        enemies.splice(i, 1); score += 10;
-                        if(score % 100 === 0) { level++; localStorage.setItem('galaxyLevel', level); }
-                        localStorage.setItem('galaxyScore', score);
-                    }
+                    if(en.hp<=0) { enemies.splice(i,1); score+=10; kills++; checkMissions(); updateUI(); }
                 }
             });
-
-            if(en.y > canvas.height || (Math.abs(en.x - player.x) < 35 && Math.abs(en.y - player.y) < 35)) gameOver();
         });
 
         enemyBullets.forEach((eb, i) => {
             eb.y += eb.vy; eb.x += eb.vx;
-            ctx.fillStyle = '#ff3300'; ctx.beginPath(); ctx.arc(eb.x, eb.y, 4, 0, Math.PI*2); ctx.fill();
-            if(Math.abs(eb.x - player.x) < 25 && Math.abs(eb.y - player.y) < 25) gameOver();
-            if(eb.y > canvas.height) enemyBullets.splice(i, 1);
+            ctx.fillStyle = '#f0f'; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill();
+            if(Math.abs(eb.x-player.x)<25 && Math.abs(eb.y-player.y)<25) location.reload();
+            if(eb.y > canvas.height) enemyBullets.splice(i,1);
         });
 
-        document.getElementById('scr').innerText = score;
-        document.getElementById('lvl').innerText = level;
-        document.getElementById('gms').innerText = gems;
         requestAnimationFrame(gameLoop);
     }
 
-    function gameOver() {
-        active = false; alert("MISSION FAILED! Score: " + score); location.reload();
+    function checkMissions() {
+        if(kills === 50) { gems += 20; alert("Mission Complete: 50 Kills!"); }
+        if(level === 5) { gems += 50; }
     }
 
     gameLoop();
 </script>
 </body>
 </html>
-
 
