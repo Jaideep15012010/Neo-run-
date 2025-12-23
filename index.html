@@ -2,97 +2,159 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TEMPLE RUN 2: ENGINE X</title>
+    <title>TEMPLE RUN 2: AI PRO MAX</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Arial', sans-serif; }
-        #ui { position: absolute; top: 10px; left: 10px; color: gold; font-size: 30px; font-weight: bold; z-index: 10; }
-        #overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; color: white; }
-        .btn { background: orange; border: none; padding: 20px 50px; font-size: 25px; color: white; border-radius: 10px; cursor: pointer; box-shadow: 0 5px 0 darkorange; }
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
+        #ui { position: absolute; top: 20px; left: 20px; color: gold; font-size: 28px; text-shadow: 0 0 15px orange; z-index: 10; }
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); z-index: 100; color: #0ff; }
+        .btn { background: linear-gradient(45deg, #00f2fe, #4facfe); border: none; padding: 20px 60px; font-size: 24px; color: #000; font-weight: bold; border-radius: 10px; cursor: pointer; box-shadow: 0 0 30px #0ff; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div id="ui">COINS: <span id="coins">0</span></div>
-    <div id="overlay">
-        <h1>TEMPLE ENGINE 2.0</h1>
-        <button class="btn" onclick="start()">START RUN</button>
-    </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        // --- PRO ENGINE LOGIC ---
-        let scene, camera, renderer, player, roadSegments = [];
-        let coins = 0, speed = 1.2, isRunning = false;
 
-        function start() {
-            document.getElementById('overlay').style.display = 'none';
-            isRunning = true;
+<div id="ui">SCORE: <span id="score">0</span></div>
+
+<div id="startMenu" class="overlay">
+    <h1 style="font-size: 50px; margin: 0;">TEMPLE RUN 2</h1>
+    <p style="color: #fff;">AI PRO MAX ENGINE v4.0</p>
+    <button class="btn" onclick="Game.start()">START MISSION</button>
+</div>
+
+<div id="gameOver" class="overlay" style="display:none">
+    <h1 style="color: #ff0055; font-size: 60px;">WASTED</h1>
+    <button class="btn" onclick="location.reload()">RETRY RUN</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// --- GAME CORE ---
+const Game = {
+    active: false, score: 0, speed: 0.9,
+    start() { document.getElementById('startMenu').style.display = 'none'; this.active = true; }
+};
+
+// --- SCENE & CAMERA ---
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000510, 0.03);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// --- LIGHTING ---
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(0, 20, -10);
+scene.add(sun, new THREE.AmbientLight(0x404040));
+
+// --- REAL HUMAN CHARACTER (MODULAR) ---
+const player = new THREE.Group();
+const skin = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x004444 });
+const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), skin);
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skin); head.position.y = 1;
+const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1, 0.3), skin); lLeg.position.set(-0.2, -1, 0);
+const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1, 0.3), skin); rLeg.position.set(0.2, -1, 0);
+const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 0.2), skin); lArm.position.set(-0.5, 0.5, 0);
+const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 0.2), skin); rArm.position.set(0.5, 0.5, 0);
+player.add(torso, head, lLeg, rLeg, lArm, rArm);
+player.position.y = 1.8;
+scene.add(player);
+
+// --- WORLD LOGIC ---
+let roadSegments = [], obstacles = [], currentLane = 0;
+const lanes = [-4, 0, 4];
+
+function createRoad(z) {
+    const geo = new THREE.BoxGeometry(12, 0.5, 30);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+    const road = new THREE.Mesh(geo, mat);
+    road.position.z = z;
+    // CURVE EFFECT: Rasta apne aap mudega
+    road.position.x = Math.sin(z * 0.03) * 6;
+    scene.add(road);
+    roadSegments.push(road);
+    if(z > 60) spawnTrap(z, road.position.x);
+}
+
+function spawnTrap(z, roadX) {
+    const type = Math.random();
+    let trap;
+    if(type > 0.6) { // Spikes
+        trap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2, 8), new THREE.MeshStandardMaterial({color: 0xff0000}));
+        trap.position.set(roadX + lanes[Math.floor(Math.random()*3)], 1, z);
+    } else { // Archway
+        trap = new THREE.Mesh(new THREE.BoxGeometry(12, 1.5, 1), new THREE.MeshStandardMaterial({color: 0xffff00}));
+        trap.position.set(roadX, 3.5, z); // Slide under this!
+    }
+    scene.add(trap); obstacles.push(trap);
+}
+
+for(let i=0; i<15; i++) createRoad(i * 30);
+
+// --- CONTROLS ---
+let startX, startY, vy = 0, isSliding = false;
+window.addEventListener('touchstart', e => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; });
+window.addEventListener('touchend', e => {
+    let dx = e.changedTouches[0].clientX - startX;
+    let dy = e.changedTouches[0].clientY - startY;
+    if(Math.abs(dx) > Math.abs(dy)) {
+        if(dx > 50) currentLane = Math.min(1, currentLane + 1);
+        if(dx < -50) currentLane = Math.max(-1, currentLane - 1);
+    } else {
+        if(dy < -50 && player.position.y <= 1.9) vy = 0.25; // Jump
+        if(dy > 50) { isSliding = true; player.scale.y = 0.5; setTimeout(()=> {player.scale.y=1; isSliding=false;}, 700); }
+    }
+});
+
+// --- ENGINE LOOP ---
+function run() {
+    requestAnimationFrame(run);
+    if(!Game.active) return;
+
+    // Movement & Speed
+    player.position.z += Game.speed;
+    const roadX = Math.sin(player.position.z * 0.03) * 6;
+    player.position.x += (roadX + lanes[currentLane + 1] - player.position.x) * 0.1;
+
+    // Physics
+    vy -= 0.01; player.position.y += vy;
+    if(player.position.y < 1.8) { player.position.y = 1.8; vy = 0; }
+
+    // HUMAN RUN ANIMATION
+    lLeg.rotation.x = Math.sin(Date.now()*0.01)*0.7;
+    rLeg.rotation.x = -Math.sin(Date.now()*0.01)*0.7;
+    lArm.rotation.x = -Math.sin(Date.now()*0.01)*0.7;
+    rArm.rotation.x = Math.sin(Date.now()*0.01)*0.7;
+
+    // Camera
+    camera.position.set(player.position.x, 6, player.position.z - 12);
+    camera.lookAt(player.position.x, 2, player.position.z + 15);
+
+    // Infinite World
+    if(player.position.z > roadSegments[0].position.z + 30) {
+        let r = roadSegments.shift();
+        r.position.z += roadSegments.length * 30 + 30;
+        r.position.x = Math.sin(r.position.z * 0.03) * 6;
+        roadSegments.push(r);
+        spawnTrap(r.position.z, r.position.x);
+    }
+
+    // Collision Detection
+    obstacles.forEach((o, i) => {
+        let dist = o.position.distanceTo(player.position);
+        if(dist < 1.8) { 
+            if(o.position.y > 3 && isSliding) return; // Safely slid under
+            Game.active = false; document.getElementById('gameOver').style.display='flex'; 
         }
+        if(o.position.z < player.position.z - 20) { scene.remove(o); obstacles.splice(i,1); }
+    });
 
-        // SCENE SETUP
-        scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x000000, 10, 150);
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        // LIGHTS
-        const light = new THREE.DirectionalLight(0xffffff, 1.5);
-        light.position.set(0, 50, -20);
-        scene.add(light, new THREE.AmbientLight(0x404040));
-
-        // PLAYER (3D MESH)
-        const playerGeo = new THREE.CylinderGeometry(0.6, 0.6, 2, 8);
-        const playerMat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-        player = new THREE.Mesh(playerGeo, playerMat);
-        player.position.y = 1;
-        scene.add(player);
-
-        // INFINITE ROAD SEGMENTS
-        function createRoad(z) {
-            const geo = new THREE.BoxGeometry(10, 0.5, 30);
-            const mat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-            const road = new THREE.Mesh(geo, mat);
-            // Curves logic
-            road.position.x = Math.sin(z * 0.05) * 5; 
-            road.position.z = z;
-            scene.add(road);
-            roadSegments.push(road);
-        }
-
-        for(let i=0; i<10; i++) createRoad(i * 30);
-
-        // CONTROLS (Swipe)
-        let lane = 0;
-        document.addEventListener('keydown', (e) => {
-            if(e.key === 'ArrowLeft') lane = Math.max(-1, lane-1);
-            if(e.key === 'ArrowRight') lane = Math.min(1, lane+1);
-        });
-
-        // GAME LOOP
-        function update() {
-            requestAnimationFrame(update);
-            if(!isRunning) return;
-
-            // Player Movement
-            player.position.z += speed;
-            player.position.x += (lane * 3.5 - player.position.x) * 0.1;
-
-            // Camera Tracking
-            camera.position.set(player.position.x, 6, player.position.z - 10);
-            camera.lookAt(player.position.x, 2, player.position.z + 10);
-
-            // Infinite Road recycling
-            if(player.position.z > roadSegments[0].position.z + 30) {
-                let first = roadSegments.shift();
-                first.position.z += roadSegments.length * 30 + 30;
-                first.position.x = Math.sin(first.position.z * 0.05) * 5;
-                roadSegments.push(first);
-            }
-
-            renderer.render(scene, camera);
-        }
-        update();
-    </script>
+    Game.score += 0.2;
+    document.getElementById('score').innerText = Math.floor(Game.score);
+    renderer.render(scene, camera);
+}
+run();
+</script>
 </body>
 </html>
 
